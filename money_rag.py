@@ -648,6 +648,10 @@ Return ONLY valid JSON with exactly these two fields:
             chart_path = os.path.join(self.temp_dir, "latest_chart.json")
             if os.path.exists(chart_path):
                 os.remove(chart_path)
+                
+            images_path = os.path.join(self.temp_dir, "latest_images.json")
+            if os.path.exists(images_path):
+                os.remove(images_path)
 
             # Stream events so we can yield live tool-call updates
             final_content = ""
@@ -688,13 +692,18 @@ Return ONLY valid JSON with exactly these two fields:
                         elif content:
                             final_content = content
 
-            # Build final response (with optional chart)
+            # Build final response (with optional chart and images)
             if os.path.exists(chart_path):
                 with open(chart_path, "r") as f:
                     chart_json = f.read()
-                yield {"type": "final", "content": f"{final_content}\n\n===CHART===\n{chart_json}\n===ENDCHART==="}
-            else:
-                yield {"type": "final", "content": final_content}
+                final_content = f"{final_content}\n\n===CHART===\n{chart_json}\n===ENDCHART==="
+                
+            if os.path.exists(images_path):
+                with open(images_path, "r") as f:
+                    images_json = f.read()
+                final_content = f"{final_content}\n\n===IMAGES===\n{images_json}\n===ENDIMAGES==="
+                
+            yield {"type": "final", "content": final_content}
             
         finally:
             try:
