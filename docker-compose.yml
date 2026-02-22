@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Points the Expo bundle at the backend.
+        # For local dev: http://localhost:7860/api/v1
+        # For HF Spaces: https://<user>-<backend-space>.hf.space/api/v1
+        EXPO_PUBLIC_API_URL: http://localhost:7860/api/v1
+    ports:
+      - "8081:7860"
+    depends_on:
+      backend:
+        condition: service_healthy

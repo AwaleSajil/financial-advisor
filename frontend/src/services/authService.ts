@@ -7,7 +7,6 @@ const log = createLogger("AuthService");
 
 export interface AuthResult {
   user: User;
-  access_token: string;
 }
 
 export async function login(
@@ -53,7 +52,6 @@ export async function login(
 
   return {
     user: { id: data.user.id, email: data.user.email! },
-    access_token: data.session.access_token,
   };
 }
 

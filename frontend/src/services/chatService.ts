@@ -1,6 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { API_URL } from "./api";
+import { getSupabase } from "../lib/supabase";
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("ChatService");
@@ -158,7 +158,16 @@ export async function streamChat(
   message: string,
   callbacks: ChatEventCallbacks
 ): Promise<void> {
-  const token = await AsyncStorage.getItem("access_token");
+  let token: string | null = null;
+  try {
+    const supabase = await getSupabase();
+    // Use refreshSession to ensure the token is valid before starting a stream
+    // (streams can't retry on 401 mid-flight like regular requests)
+    const { data: { session } } = await supabase.auth.refreshSession();
+    token = session?.access_token ?? null;
+  } catch (e) {
+    log.warn("Failed to get token from Supabase session", e);
+  }
   log.info("streamChat called", {
     platform: Platform.OS,
     messageLength: message.length,

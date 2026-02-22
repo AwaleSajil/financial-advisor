@@ -250,9 +250,9 @@ export default function IngestScreen() {
         {files.length === 0 ? (
           <Text style={styles.emptyText}>No files uploaded yet.</Text>
         ) : (
-          files.map((file) => (
+          files.map((file, index) => (
             <FileListItem
-              key={file.id}
+              key={file.id ?? `file-${index}`}
               file={file}
               onDelete={setDeleteTarget}
             />

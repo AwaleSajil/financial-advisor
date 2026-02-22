@@ -1,6 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import { getSupabase } from "../lib/supabase";
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("API");
@@ -10,10 +10,9 @@ function getApiUrl(): string {
   log.debug("getApiUrl called", { envUrl, platform: Platform.OS });
 
   if (Platform.OS === "web") {
-    // In production (Docker/HF Spaces), frontend and API share the same origin.
-    // Always use a relative path to avoid mixed-content (http vs https) issues.
-    // Only honour envUrl for local dev (localhost).
-    const url = envUrl && envUrl.includes("localhost") ? envUrl : "/api/v1";
+    // If an explicit API URL is set (local dev or separate Docker containers), use it.
+    // Otherwise fall back to a relative path (single-container / HF Spaces).
+    const url = envUrl || "/api/v1";
     log.info("Web platform API URL", { url });
     return url;
   }
@@ -46,11 +45,36 @@ function getApiUrl(): string {
 
 export const API_URL = getApiUrl();
 
+/**
+ * Get the current access token from the Supabase session.
+ * Uses getSession() for the local cache, or refreshSession() to force
+ * a server-side refresh when the cached token has been rejected.
+ */
+async function getAccessToken(forceRefresh = false): Promise<string | null> {
+  try {
+    const supabase = await getSupabase();
+    if (forceRefresh) {
+      log.info("Forcing Supabase session refresh");
+      const { data: { session }, error } = await supabase.auth.refreshSession();
+      if (error) {
+        log.warn("Session refresh failed", { error: error.message });
+        return null;
+      }
+      return session?.access_token ?? null;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  } catch (e) {
+    log.warn("Failed to get token from Supabase session", e);
+    return null;
+  }
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const token = await AsyncStorage.getItem("access_token");
+  const token = await getAccessToken();
   const method = options.method || "GET";
 
   log.info(`${method} ${path}`, {
@@ -87,10 +111,18 @@ export async function apiFetch(
       ok: res.ok,
     });
 
-    if (res.status === 401) {
-      log.warn("401 Unauthorized - clearing stored token");
-      await AsyncStorage.removeItem("access_token");
-      // Caller should handle redirect to login
+    // On 401, try once with a refreshed token before giving up
+    if (res.status === 401 && token) {
+      log.warn("401 Unauthorized - attempting session refresh and retry");
+      const freshToken = await getAccessToken(true);
+      if (freshToken && freshToken !== token) {
+        log.info("Got fresh token - retrying request");
+        const retryHeaders = { ...headers, Authorization: `Bearer ${freshToken}` };
+        const retryRes = await fetch(url, { ...options, headers: retryHeaders });
+        log.info(`${method} ${path} retry -> ${retryRes.status}`);
+        return retryRes;
+      }
+      log.warn("Session refresh did not yield a new token");
     }
 
     return res;

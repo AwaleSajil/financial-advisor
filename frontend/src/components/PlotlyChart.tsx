@@ -201,7 +201,7 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           zerolinecolor: 'rgba(0,0,0,0.1)'
         });
 
-        var layout = Object.assign({}, chartData.layout || {}, {
+        var baseLayout = {
           width: ${chartWidth},
           height: ${chartHeight},
           autosize: false,
@@ -224,8 +224,6 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
             y: 0.98,
             yanchor: 'top'
           } : undefined,
-          xaxis: isPie ? undefined : xaxis,
-          yaxis: isPie ? undefined : yaxis,
           legend: {
             orientation: 'h',
             yanchor: 'top',
@@ -244,7 +242,18 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           },
           bargap: 0.2,
           bargroupgap: 0.1
-        });
+        };
+
+        // Merge with original layout, then add axis config
+        // For pie charts, explicitly delete xaxis/yaxis to avoid Plotly reading .anchor on undefined
+        var layout = Object.assign({}, chartData.layout || {}, baseLayout);
+        if (isPie) {
+          delete layout.xaxis;
+          delete layout.yaxis;
+        } else {
+          layout.xaxis = xaxis;
+          layout.yaxis = yaxis;
+        }
 
         Plotly.newPlot('chart', chartData.data, layout, {
           responsive: false,
@@ -362,11 +371,26 @@ function PlotlyChartWeb({ chartJson }: { chartJson: string }) {
       try {
         const Plotly = (window as any).Plotly || (await import("plotly.js-dist-min" as any)).default;
         const parsed = JSON.parse(chartJson);
+        const data = parsed.data || [];
+        const layout = parsed.layout || {};
+
+        // Normalize title: Plotly v2 expects { text: "..." } not a bare string
+        if (typeof layout.title === "string") {
+          layout.title = { text: layout.title };
+        }
+        // Ensure axis objects exist so Plotly doesn't crash reading .anchor on undefined
+        if (layout.xaxis !== undefined && typeof layout.xaxis !== "object") {
+          delete layout.xaxis;
+        }
+        if (layout.yaxis !== undefined && typeof layout.yaxis !== "object") {
+          delete layout.yaxis;
+        }
+
         Plotly.newPlot(
           ref.current,
-          parsed.data,
+          data,
           {
-            ...parsed.layout,
+            ...layout,
             autosize: true,
             margin: { l: 40, r: 20, t: 40, b: 40 },
             paper_bgcolor: "transparent",

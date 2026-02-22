@@ -32,9 +32,13 @@ def _list_files_sync(access_token: str, user_id: str) -> List[dict]:
     files = []
     for d in res_csv:
         d["type"] = "csv"
+        if d.get("id") is not None:
+            d["id"] = str(d["id"])
         files.append(d)
     for d in res_bill:
         d["type"] = "bill"
+        if d.get("id") is not None:
+            d["id"] = str(d["id"])
         files.append(d)
     return files
 

@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSupabase } from "../lib/supabase";
 import * as authService from "../services/authService";
 import { createLogger } from "../lib/logger";
@@ -9,7 +8,6 @@ const log = createLogger("AuthProvider");
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<string>;
@@ -18,7 +16,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  token: null,
   loading: true,
   login: async () => {},
   register: async () => "",
@@ -27,7 +24,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,24 +32,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let subscription: { unsubscribe: () => void } | null = null;
 
     getSupabase().then((supabase) => {
-      // Check for existing session on mount
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      // Verify session on mount by refreshing with the server.
+      // getSession() only returns the local cache which may be stale
+      // (e.g. session revoked server-side). refreshSession() validates
+      // and returns a fresh token, or null if the session is truly dead.
+      supabase.auth.refreshSession().then(({ data: { session }, error }) => {
+        if (error) {
+          log.warn("Session refresh failed on mount", { error: error.message });
+        }
         if (session?.user) {
-          log.info("Existing session found", {
+          log.info("Valid session found", {
             userId: session.user.id,
             email: session.user.email,
             tokenExpiry: session.expires_at,
           });
           setUser({ id: session.user.id, email: session.user.email! });
-          setToken(session.access_token);
-          AsyncStorage.setItem("access_token", session.access_token);
         } else {
-          log.info("No existing session found");
+          log.info("No valid session found");
         }
         setLoading(false);
       });
 
-      // Listen for auth state changes (token refresh, etc.)
+      // Listen for auth state changes (token refresh, sign-in, sign-out)
       const { data } = supabase.auth.onAuthStateChange((event, session) => {
         log.info("Auth state changed", {
           event,
@@ -64,14 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           setUser({ id: session.user.id, email: session.user.email! });
-          setToken(session.access_token);
-          AsyncStorage.setItem("access_token", session.access_token);
-          log.debug("Token stored in AsyncStorage");
         } else {
           log.info("Session cleared - user logged out");
           setUser(null);
-          setToken(null);
-          AsyncStorage.removeItem("access_token");
         }
       });
       subscription = data.subscription;
@@ -88,8 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await authService.login(email, password);
     log.info("Login flow complete - setting user state", { userId: result.user.id });
     setUser(result.user);
-    setToken(result.access_token);
-    await AsyncStorage.setItem("access_token", result.access_token);
   };
 
   const register = async (email: string, password: string) => {
@@ -103,14 +96,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     log.info("Logout flow started");
     await authService.logout();
     setUser(null);
-    setToken(null);
-    await AsyncStorage.removeItem("access_token");
     log.info("Logout flow complete - state cleared");
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout }}
+      value={{ user, loading, login, register, logout }}
     >
       {children}
     </AuthContext.Provider>
