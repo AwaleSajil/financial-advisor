@@ -1,6 +1,9 @@
+import logging
 import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+logger = logging.getLogger("moneyrag.config")
 
 
 class Settings(BaseSettings):
@@ -17,4 +20,12 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    logger.debug("Loading settings from .env")
+    settings = Settings()
+    logger.debug(
+        "Settings loaded — SUPABASE_URL=%s, QDRANT_URL=%s, DATABASE_URL=%s",
+        settings.SUPABASE_URL,
+        settings.QDRANT_URL,
+        settings.DATABASE_URL[:30] + "..." if len(settings.DATABASE_URL) > 30 else settings.DATABASE_URL,
+    )
+    return settings

@@ -1,24 +1,41 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from backend.dependencies import get_current_user
 from backend.schemas.config_schema import ConfigUpdate
 from backend.services import config_service
 from backend.services.rag_manager import rag_manager
 
+logger = logging.getLogger("moneyrag.routers.config")
+
 router = APIRouter()
 
 
 @router.get("/")
 async def get_config(user: dict = Depends(get_current_user)):
+    logger.debug("GET config for user_id=%s", user["id"])
     config = await config_service.get_config(user)
+    logger.debug(
+        "Config result for user_id=%s: %s",
+        user["id"],
+        "found" if config else "not found",
+    )
     return config
 
 
 @router.put("/")
 async def update_config(body: ConfigUpdate, user: dict = Depends(get_current_user)):
+    logger.debug(
+        "PUT config for user_id=%s — provider=%s, model=%s",
+        user["id"], body.llm_provider, body.decode_model,
+    )
     try:
         record = await config_service.upsert_config(user, body.model_dump())
+        logger.debug("Config saved for user_id=%s — invalidating RAG cache", user["id"])
         # Invalidate cached RAG instance so it picks up new config
         await rag_manager.invalidate(user["id"])
+        logger.info("Config updated and RAG invalidated for user_id=%s", user["id"])
         return record
     except Exception as e:
+        logger.error("Failed to save config for user_id=%s: %s", user["id"], e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to save config: {e}")

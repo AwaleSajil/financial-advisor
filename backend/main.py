@@ -1,19 +1,52 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.routers import auth, config_router, files, chat
 from backend.services.rag_manager import rag_manager
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("moneyrag.main")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("MoneyRAG API starting up")
+    logger.debug("Registered routers: auth, config, files, chat")
     yield
+    logger.info("MoneyRAG API shutting down — cleaning up RAG instances")
     await rag_manager.cleanup_all()
+    logger.info("Shutdown complete")
 
 
 app = FastAPI(title="MoneyRAG API", version="1.0.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.debug(
+        ">>> %s %s | headers: %s",
+        request.method,
+        request.url.path,
+        dict(request.headers),
+    )
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.debug(
+        "<<< %s %s | status=%d | %.1fms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
 
 
 def custom_openapi():
@@ -50,4 +83,5 @@ app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 
 @app.get("/api/v1/health")
 async def health():
+    logger.debug("Health check hit")
     return {"status": "ok"}
