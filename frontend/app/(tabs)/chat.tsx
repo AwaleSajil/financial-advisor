@@ -1,35 +1,32 @@
 import React, { useRef, useEffect } from "react";
-import { StyleSheet, View, FlatList } from "react-native";
-import { Text, Banner, ActivityIndicator } from "react-native-paper";
+import { StyleSheet, View, FlatList, KeyboardAvoidingView, Platform } from "react-native";
+import { Banner } from "react-native-paper";
+import { useRouter } from "expo-router";
 import { ChatMessage } from "../../src/components/ChatMessage";
 import { ChatInput } from "../../src/components/ChatInput";
-import { ToolTrace } from "../../src/components/ToolTrace";
+import { SuggestedPrompts } from "../../src/components/SuggestedPrompts";
+import { TypingIndicator } from "../../src/components/TypingIndicator";
 import { useChat } from "../../src/hooks/useChat";
 import { useFiles } from "../../src/hooks/useFiles";
-import { colors } from "../../src/styles/theme";
+import { colors, spacing } from "../../src/styles/theme";
 import { createLogger } from "../../src/lib/logger";
 
 const log = createLogger("ChatScreen");
 
 export default function ChatScreen() {
   log.debug("ChatScreen rendered");
-  const { messages, isStreaming, currentToolTraces, sendMessage } = useChat();
+  const { messages, isStreaming, sendMessage } = useChat();
   const { files } = useFiles();
   const flatListRef = useRef<FlatList>(null);
+  const router = useRouter();
 
   const fileCount = files.length;
-  const fileNames = files
-    .slice(0, 3)
-    .map((f) => f.filename)
-    .join(", ");
-  const fileSuffix = fileCount > 3 ? ` + ${fileCount - 3} more` : "";
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     log.debug("Messages/streaming state changed", {
       messageCount: messages.length,
       isStreaming,
-      toolTraceCount: currentToolTraces.length,
       fileCount: files.length,
     });
     if (messages.length > 0) {
@@ -37,25 +34,27 @@ export default function ChatScreen() {
     }
   }, [messages.length, isStreaming]);
 
+  const wrapperProps = Platform.OS === "ios"
+    ? { style: styles.container, behavior: "padding" as const, keyboardVerticalOffset: 90 }
+    : { style: styles.container, behavior: "padding" as const, keyboardVerticalOffset: 80 };
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView {...wrapperProps}>
       {/* File status banner */}
-      {fileCount === 0 ? (
+      {fileCount === 0 && (
         <Banner
           visible
           style={styles.warningBanner}
           icon="alert-circle-outline"
+          actions={[
+            {
+              label: "Upload Files",
+              onPress: () => router.push("/(tabs)/ingest"),
+            },
+          ]}
         >
-          No data loaded yet. Go to Ingest Data to upload a CSV or Bill file
-          before chatting.
+          No data loaded yet. Upload a CSV or receipt to start chatting.
         </Banner>
-      ) : (
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoBannerText}>
-            {fileCount} file{fileCount > 1 ? "s" : ""} loaded: {fileNames}
-            {fileSuffix}
-          </Text>
-        </View>
       )}
 
       {/* Messages */}
@@ -65,34 +64,22 @@ export default function ChatScreen() {
         keyExtractor={(_, i) => String(i)}
         renderItem={({ item }) => <ChatMessage message={item} />}
         contentContainerStyle={styles.messagesList}
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Ask about your spending</Text>
-            <Text style={styles.emptySubtitle}>
-              Try "What are my top spending categories?" or "Show me spending
-              trends this month"
-            </Text>
-          </View>
+          <SuggestedPrompts onSelectPrompt={sendMessage} />
         }
       />
 
-      {/* Streaming tool trace indicator */}
+      {/* Streaming indicator */}
       {isStreaming && (
         <View style={styles.streamingIndicator}>
-          {currentToolTraces.length > 0 ? (
-            <ToolTrace traces={currentToolTraces} />
-          ) : (
-            <View style={styles.thinkingRow}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.thinkingText}>Thinking...</Text>
-            </View>
-          )}
+          <TypingIndicator />
         </View>
       )}
 
       {/* Chat input */}
       <ChatInput onSend={sendMessage} disabled={isStreaming} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -104,51 +91,12 @@ const styles = StyleSheet.create({
   warningBanner: {
     backgroundColor: "#FEF3C7",
   },
-  infoBanner: {
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.primaryBorder,
-  },
-  infoBannerText: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: "500",
-  },
   messagesList: {
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     flexGrow: 1,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    lineHeight: 22,
-  },
   streamingIndicator: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  thinkingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  thinkingText: {
-    fontSize: 13,
-    color: colors.textSecondary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
 });

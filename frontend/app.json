@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "MoneyRAG",
-    "slug": "moneyrag",
+    "name": "R2R",
+    "slug": "r2r",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "moneyrag",
+    "scheme": "r2r",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.moneyrag.app",
+      "bundleIdentifier": "com.r2r.app",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -27,8 +27,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#6366f1"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.moneyrag.app",
+      "softwareKeyboardLayoutMode": "pan",
+      "package": "com.r2r.app",
       "usesCleartextTraffic": true
     },
     "web": {
@@ -40,7 +40,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow MoneyRAG to access your camera to capture receipts and documents."
+          "cameraPermission": "Allow R2R to access your camera to capture receipts and documents."
         }
       ]
     ]

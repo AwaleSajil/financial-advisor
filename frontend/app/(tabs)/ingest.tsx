@@ -1,15 +1,17 @@
 import React, { useState } from "react";
-import { StyleSheet, View, FlatList, ScrollView, Platform } from "react-native";
-import { Text, Button, Snackbar, Divider } from "react-native-paper";
+import { StyleSheet, View, ScrollView, Platform } from "react-native";
+import { Text, Button, Snackbar, ProgressBar, Badge } from "react-native-paper";
 import * as DocumentPicker from "expo-document-picker";
 import { useCameraPermissions } from "expo-camera";
 import { FileListItem } from "../../src/components/FileListItem";
 import { DeleteConfirmModal } from "../../src/components/DeleteConfirmModal";
 import { CameraCapture } from "../../src/components/CameraCapture";
 import { GlassCard } from "../../src/components/GlassCard";
+import { UploadDropZone } from "../../src/components/UploadDropZone";
+import { PickedFileChip } from "../../src/components/PickedFileChip";
 import { LoadingSpinner } from "../../src/components/LoadingSpinner";
 import { useFiles } from "../../src/hooks/useFiles";
-import { colors } from "../../src/styles/theme";
+import { colors, typography, spacing } from "../../src/styles/theme";
 import { createLogger } from "../../src/lib/logger";
 import type { FileItem } from "../../src/lib/types";
 
@@ -65,7 +67,7 @@ export default function IngestScreen() {
         log.info("Files picked", {
           files: picked.map((f) => ({ name: f.name, type: f.type })),
         });
-        setPickedFiles(picked);
+        setPickedFiles((prev) => [...prev, ...picked]);
       }
     } catch (e: any) {
       log.error("Document picker error", e);
@@ -96,6 +98,10 @@ export default function IngestScreen() {
   const handleCameraCapture = (photo: { uri: string; name: string; type: string }) => {
     log.info("Camera photo captured", { name: photo.name, type: photo.type });
     setPickedFiles((prev) => [...prev, photo]);
+  };
+
+  const handleRemovePickedFile = (index: number) => {
+    setPickedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleIngest = async () => {
@@ -145,71 +151,62 @@ export default function IngestScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Upload Section */}
-        <GlassCard>
-          <Text style={styles.sectionTitle}>Upload Files</Text>
-          <Text style={styles.sectionSubtitle}>
-            Upload CSV transactions or receipt images (PNG, JPG)
-          </Text>
+        {/* Section 1: Upload Drop Zone */}
+        <UploadDropZone
+          onPickFiles={handlePickFiles}
+          onOpenCamera={handleOpenCamera}
+        />
 
-          <View style={styles.buttonRow}>
-            <Button
-              mode="outlined"
-              icon="file-plus"
-              onPress={handlePickFiles}
-              style={[styles.pickButton, styles.buttonFlex]}
-            >
-              Select Files
-            </Button>
-
-            {Platform.OS !== "web" && (
-              <Button
-                mode="outlined"
-                icon="camera"
-                onPress={handleOpenCamera}
-                style={[styles.pickButton, styles.buttonFlex]}
-              >
-                Camera
-              </Button>
-            )}
-          </View>
-
-          {pickedFiles.length > 0 && (
-            <View style={styles.pickedList}>
+        {/* Section 2: Picked Files */}
+        {pickedFiles.length > 0 && (
+          <GlassCard variant="elevated" style={styles.pickedSection}>
+            <Text style={styles.pickedTitle}>
+              {pickedFiles.length} file{pickedFiles.length > 1 ? "s" : ""} selected
+            </Text>
+            <View style={styles.chipRow}>
               {pickedFiles.map((f, i) => (
-                <Text key={i} style={styles.pickedFileName}>
-                  {f.name}
-                </Text>
+                <PickedFileChip
+                  key={`${f.name}-${i}`}
+                  name={f.name}
+                  type={f.type}
+                  onRemove={() => handleRemovePickedFile(i)}
+                />
               ))}
-              <Button
-                mode="contained"
-                icon="upload"
-                onPress={handleIngest}
-                loading={isUploading}
-                disabled={isUploading}
-                style={styles.ingestButton}
-                labelStyle={styles.ingestButtonLabel}
-              >
-                {isUploading ? "Processing..." : "Ingest Selected Files"}
-              </Button>
             </View>
-          )}
-        </GlassCard>
-
-        {/* Ingestion Status */}
-        {isIngesting && (
-          <GlassCard>
-            <View style={styles.ingestingRow}>
-              <Text style={styles.ingestingText}>Ingesting files... This may take a minute.</Text>
-            </View>
+            <Button
+              mode="contained"
+              icon="upload"
+              onPress={handleIngest}
+              loading={isUploading}
+              disabled={isUploading}
+              style={styles.ingestButton}
+              labelStyle={styles.ingestButtonLabel}
+            >
+              {isUploading ? "Uploading..." : `Ingest ${pickedFiles.length} File${pickedFiles.length > 1 ? "s" : ""}`}
+            </Button>
           </GlassCard>
         )}
 
-        {/* Duplicate Warnings */}
+        {/* Section 3: Ingestion Progress */}
+        {isIngesting && (
+          <GlassCard style={styles.progressSection}>
+            <Text style={styles.progressText}>Processing your files...</Text>
+            <ProgressBar
+              indeterminate
+              color={colors.primary}
+              style={styles.progressBar}
+            />
+            <Text style={styles.progressSubtext}>
+              This may take a minute
+            </Text>
+          </GlassCard>
+        )}
+
+        {/* Section 4: Duplicate Warnings */}
         {duplicates.length > 0 && (
-          <GlassCard>
+          <GlassCard variant="flat" style={styles.duplicateCard}>
             <Text style={styles.duplicateTitle}>
-              {duplicates.length} duplicate transaction(s) detected
+              {duplicates.length} duplicate transaction{duplicates.length > 1 ? "s" : ""} detected
             </Text>
             <Text style={styles.duplicateSubtitle}>
               These were merged/skipped during ingestion:
@@ -235,10 +232,21 @@ export default function IngestScreen() {
           </GlassCard>
         )}
 
-        <Divider style={styles.divider} />
+        {/* Section 5: Your Files */}
+        <View style={styles.fileListHeader}>
+          <View style={styles.fileListTitleRow}>
+            <Text style={styles.fileListTitle}>Your Files</Text>
+            {files.length > 0 && (
+              <Badge style={styles.fileCount}>{files.length}</Badge>
+            )}
+          </View>
+          {files.length > 0 && (
+            <Text style={styles.fileListSubtitle}>
+              {files.filter(f => f.type === "csv").length} CSV, {files.filter(f => f.type === "bill").length} receipt{files.filter(f => f.type === "bill").length !== 1 ? "s" : ""}
+            </Text>
+          )}
+        </View>
 
-        {/* File List */}
-        <Text style={styles.sectionTitle}>Your Uploaded Files</Text>
         {files.length === 0 ? (
           <Text style={styles.emptyText}>No files uploaded yet.</Text>
         ) : (
@@ -289,87 +297,95 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  pickedSection: {
+    marginTop: spacing.lg,
+  },
+  pickedTitle: {
+    ...typography.subtitle2,
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: spacing.md,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  buttonRow: {
+  chipRow: {
     flexDirection: "row",
-    gap: 10,
-  },
-  buttonFlex: {
-    flex: 1,
-  },
-  pickButton: {
-    borderRadius: 10,
-    borderColor: colors.border,
-  },
-  pickedList: {
-    marginTop: 12,
-    gap: 6,
-  },
-  pickedFileName: {
-    fontSize: 13,
-    color: colors.text,
-    paddingLeft: 4,
+    flexWrap: "wrap",
   },
   ingestButton: {
     borderRadius: 10,
     backgroundColor: colors.primary,
-    marginTop: 8,
+    marginTop: spacing.md,
   },
   ingestButtonLabel: {
     fontWeight: "600",
     paddingVertical: 2,
   },
-  divider: {
-    marginVertical: 20,
-    backgroundColor: colors.surfaceBorder,
+  progressSection: {
+    marginTop: spacing.lg,
   },
-  emptyText: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: 8,
-  },
-  ingestingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  ingestingText: {
-    fontSize: 14,
+  progressText: {
+    ...typography.subtitle2,
     color: colors.primary,
-    fontWeight: "600",
+    marginBottom: spacing.md,
+  },
+  progressBar: {
+    borderRadius: 4,
+    height: 4,
+  },
+  progressSubtext: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.sm,
+  },
+  duplicateCard: {
+    marginTop: spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.warning,
   },
   duplicateTitle: {
-    fontSize: 15,
-    fontWeight: "700",
+    ...typography.subtitle2,
     color: "#b45309",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   duplicateSubtitle: {
-    fontSize: 13,
+    ...typography.caption,
     color: colors.textSecondary,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   duplicateItem: {
-    fontSize: 13,
+    ...typography.caption,
     color: colors.text,
-    paddingLeft: 8,
+    paddingLeft: spacing.sm,
     paddingVertical: 2,
   },
   dismissButton: {
     alignSelf: "flex-start",
-    marginTop: 4,
+    marginTop: spacing.xs,
+  },
+  fileListHeader: {
+    marginTop: spacing.xxl,
+    marginBottom: spacing.lg,
+  },
+  fileListTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  fileListTitle: {
+    ...typography.h3,
+    color: colors.text,
+  },
+  fileCount: {
+    backgroundColor: colors.primary,
+  },
+  fileListSubtitle: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
+  },
+  emptyText: {
+    ...typography.body2,
+    color: colors.textSecondary,
   },
 });

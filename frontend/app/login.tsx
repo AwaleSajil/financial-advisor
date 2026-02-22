@@ -6,10 +6,11 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Text, TextInput, Button, Snackbar } from "react-native-paper";
+import { Text, TextInput, Button, Snackbar, SegmentedButtons } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/providers/AuthProvider";
 import { GlassCard } from "../src/components/GlassCard";
-import { colors } from "../src/styles/theme";
+import { colors, typography, spacing } from "../src/styles/theme";
 import { createLogger } from "../src/lib/logger";
 
 const log = createLogger("LoginScreen");
@@ -18,48 +19,38 @@ export default function LoginScreen() {
   log.debug("LoginScreen rendered");
   const { login, register } = useAuth();
 
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [snackbar, setSnackbar] = useState({ visible: false, message: "", error: false });
 
-  const handleLogin = async () => {
-    if (!loginEmail || !loginPassword) return;
-    log.info("Login button pressed", { email: loginEmail });
-    setIsLoggingIn(true);
+  const handleSubmit = async () => {
+    if (!email || !password) return;
+    setIsSubmitting(true);
     try {
-      await login(loginEmail, loginPassword);
-      log.info("Login successful from UI");
+      if (mode === "login") {
+        log.info("Login button pressed", { email });
+        await login(email, password);
+        log.info("Login successful from UI");
+      } else {
+        log.info("Register button pressed", { email });
+        const msg = await register(email, password);
+        log.info("Registration successful from UI", { message: msg });
+        setSnackbar({ visible: true, message: msg, error: false });
+      }
     } catch (e: any) {
-      log.error("Login failed from UI", { error: e.message });
+      log.error(`${mode} failed from UI`, { error: e.message });
       setSnackbar({ visible: true, message: e.message, error: true });
     } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!regEmail || !regPassword) return;
-    log.info("Register button pressed", { email: regEmail });
-    setIsRegistering(true);
-    try {
-      const msg = await register(regEmail, regPassword);
-      log.info("Registration successful from UI", { message: msg });
-      setSnackbar({ visible: true, message: msg, error: false });
-    } catch (e: any) {
-      log.error("Registration failed from UI", { error: e.message });
-      setSnackbar({ visible: true, message: e.message, error: true });
-    } finally {
-      setIsRegistering(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
+    <SafeAreaView style={styles.container}>
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
@@ -68,105 +59,60 @@ export default function LoginScreen() {
       >
         {/* Hero Section */}
         <View style={styles.hero}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>AI-Powered Finance</Text>
-          </View>
-          <Text style={styles.title}>MoneyRAG</Text>
+          <Text style={styles.title}>R2R</Text>
           <Text style={styles.subtitle}>
-            Your personal finance analyst. Upload bank statements, ask questions,
-            get insights — powered by AI.
+            Your AI-powered finance analyst
           </Text>
         </View>
 
-        {/* Auth Cards */}
-        <View style={styles.cardsRow}>
-          <GlassCard style={styles.card}>
-            <Text style={styles.cardTitle}>Sign In</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="you@example.com"
-              value={loginEmail}
-              onChangeText={setLoginEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-              outlineStyle={styles.outline}
-              dense
-            />
-            <TextInput
-              mode="outlined"
-              placeholder="Password"
-              value={loginPassword}
-              onChangeText={setLoginPassword}
-              secureTextEntry
-              style={styles.input}
-              outlineStyle={styles.outline}
-              dense
-            />
-            <Button
-              mode="contained"
-              onPress={handleLogin}
-              loading={isLoggingIn}
-              disabled={isLoggingIn || !loginEmail || !loginPassword}
-              style={styles.primaryButton}
-              labelStyle={styles.buttonLabel}
-            >
-              Sign In
-            </Button>
-          </GlassCard>
+        {/* Auth Card */}
+        <GlassCard variant="elevated" style={styles.card}>
+          <SegmentedButtons
+            value={mode}
+            onValueChange={(value) => setMode(value as "login" | "register")}
+            buttons={[
+              { value: "login", label: "Sign In" },
+              { value: "register", label: "Create Account" },
+            ]}
+            style={styles.segmented}
+          />
 
-          <GlassCard style={styles.card}>
-            <Text style={styles.cardTitle}>Create Account</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="you@example.com"
-              value={regEmail}
-              onChangeText={setRegEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-              outlineStyle={styles.outline}
-              dense
-            />
-            <TextInput
-              mode="outlined"
-              placeholder="Password"
-              value={regPassword}
-              onChangeText={setRegPassword}
-              secureTextEntry
-              style={styles.input}
-              outlineStyle={styles.outline}
-              dense
-            />
-            <Button
-              mode="outlined"
-              onPress={handleRegister}
-              loading={isRegistering}
-              disabled={isRegistering || !regEmail || !regPassword}
-              style={styles.outlinedButton}
-              labelStyle={styles.outlinedButtonLabel}
-            >
-              Create Account
-            </Button>
-          </GlassCard>
-        </View>
+          <TextInput
+            mode="outlined"
+            label="Email"
+            placeholder="you@example.com"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            style={styles.input}
+            outlineStyle={styles.outline}
+            dense
+          />
+          <TextInput
+            mode="outlined"
+            label="Password"
+            placeholder="Enter your password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            style={styles.input}
+            outlineStyle={styles.outline}
+            dense
+          />
+          <Button
+            mode="contained"
+            onPress={handleSubmit}
+            loading={isSubmitting}
+            disabled={isSubmitting || !email || !password}
+            style={styles.submitButton}
+            labelStyle={styles.submitButtonLabel}
+          >
+            {mode === "login" ? "Sign In" : "Create Account"}
+          </Button>
+        </GlassCard>
 
-        {/* Resource Links */}
-        <View style={styles.resources}>
-          <GlassCard style={styles.resourceCard}>
-            <Text style={styles.resourceTitle}>API Keys</Text>
-            <Text style={styles.resourceText}>
-              Google: aistudio.google.com{"\n"}
-              OpenAI: platform.openai.com
-            </Text>
-          </GlassCard>
-          <GlassCard style={styles.resourceCard}>
-            <Text style={styles.resourceTitle}>Export Transactions</Text>
-            <Text style={styles.resourceText}>
-              Export your bank statements as CSV files from Chase, Discover, etc.
-            </Text>
-          </GlassCard>
-        </View>
+        <Text style={styles.footer}>Secured by Supabase Auth</Text>
       </ScrollView>
 
       <Snackbar
@@ -180,6 +126,7 @@ export default function LoginScreen() {
         {snackbar.message}
       </Snackbar>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -188,111 +135,55 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  flex: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingBottom: 40,
+    flexGrow: 1,
+    justifyContent: "center",
   },
   hero: {
     alignItems: "center",
-    paddingTop: 60,
-    paddingBottom: 32,
-  },
-  badge: {
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderRadius: 99,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    marginBottom: 16,
-  },
-  badgeText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    paddingBottom: spacing.xxxl,
   },
   title: {
-    fontSize: 48,
-    fontWeight: "800",
+    ...typography.h1,
     color: colors.primary,
-    letterSpacing: -2,
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
+    ...typography.body2,
     color: colors.textSecondary,
     textAlign: "center",
-    lineHeight: 24,
-    maxWidth: 440,
-  },
-  cardsRow: {
-    flexDirection: "row",
-    gap: 16,
-    flexWrap: "wrap",
-    justifyContent: "center",
   },
   card: {
-    flex: 1,
-    minWidth: 280,
-    maxWidth: 400,
+    marginBottom: spacing.xxl,
   },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 16,
+  segmented: {
+    marginBottom: spacing.xl,
   },
   input: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
     backgroundColor: colors.surface,
   },
   outline: {
     borderRadius: 10,
     borderColor: colors.border,
   },
-  primaryButton: {
+  submitButton: {
     borderRadius: 10,
     backgroundColor: colors.primary,
-    marginTop: 4,
+    marginTop: spacing.sm,
   },
-  buttonLabel: {
+  submitButtonLabel: {
     fontWeight: "600",
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
-  outlinedButton: {
-    borderRadius: 10,
-    borderColor: colors.border,
-    marginTop: 4,
-  },
-  outlinedButtonLabel: {
-    fontWeight: "600",
-    color: colors.text,
-    paddingVertical: 4,
-  },
-  resources: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 24,
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
-  resourceCard: {
-    flex: 1,
-    minWidth: 240,
-    maxWidth: 360,
-    padding: 16,
-  },
-  resourceTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 6,
-  },
-  resourceText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 20,
+  footer: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
   },
 });

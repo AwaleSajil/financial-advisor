@@ -707,7 +707,7 @@ Return ONLY valid JSON with exactly these two fields:
             
         finally:
             try:
-                await mcp_client.close()
+                await mcp_client.__aexit__(None, None, None)
             except Exception as close_e:
                 print(f"Warning on closing MCP Client: {close_e}")
 

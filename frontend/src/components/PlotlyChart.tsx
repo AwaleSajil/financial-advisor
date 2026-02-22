@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View, Platform, ScrollView } from "react-native";
+import { StyleSheet, View, Platform, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { colors } from "../styles/theme";
 
@@ -15,192 +15,191 @@ export function PlotlyChart({ chartJson }: PlotlyChartProps) {
   return <PlotlyChartNative chartJson={chartJson} />;
 }
 
-// ---- Native implementation using react-native-gifted-charts ----
-
-const CHART_COLORS = [
-  colors.primary,
-  colors.secondary,
-  "#06b6d4",
-  colors.success,
-  colors.warning,
-  colors.error,
-  "#ec4899",
-  "#14b8a6",
-];
+// ---- Native implementation using WebView + Plotly.js ----
 
 function PlotlyChartNative({ chartJson }: { chartJson: string }) {
-  const { BarChart, LineChart, PieChart } = require("react-native-gifted-charts");
+  const { WebView } = require("react-native-webview");
+  const { width: screenWidth } = useWindowDimensions();
+  const [webViewHeight, setWebViewHeight] = React.useState(400);
+  const [error, setError] = React.useState<string | null>(null);
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(chartJson);
-  } catch {
+  // Wide bubble (98% of screen) with reduced padding
+  const bubbleContentWidth = Math.floor(screenWidth * 0.98) - 16 - 8;
+  const chartWidth = Math.max(bubbleContentWidth, 200);
+  const chartHeight = Math.round(chartWidth * 0.85);
+  const fontSize = Math.max(9, Math.min(11, Math.round(chartWidth / 30)));
+
+  // Base64-encode the chart JSON so it survives template literal injection safely.
+  // This avoids issues with backticks, ${}, or special chars in the JSON breaking the HTML.
+  const chartJsonB64 = React.useMemo(() => {
+    try {
+      // Ensure it's valid JSON first; re-stringify to normalise
+      const parsed = JSON.parse(chartJson);
+      const clean = JSON.stringify(parsed);
+      // btoa works in RN's JSC/Hermes for ASCII; chart JSON is ASCII-safe after stringify
+      return btoa(unescape(encodeURIComponent(clean)));
+    } catch {
+      return "";
+    }
+  }, [chartJson]);
+
+  const html = React.useMemo(() => {
+    if (!chartJsonB64) return "";
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; font-family: -apple-system, sans-serif; }
+    #chart { width: ${chartWidth}px; }
+    #status { color: #888; text-align: center; padding: 20px; font-size: 13px; }
+    .modebar { top: 0 !important; right: 4px !important; }
+    .modebar-btn { font-size: 14px !important; }
+    .modebar-group { padding: 0 2px !important; }
+  </style>
+</head>
+<body>
+  <div id="status">Loading chart...</div>
+  <div id="chart"></div>
+  <script>
+    var CHART_B64 = "${chartJsonB64}";
+
+    function msg(obj) { window.ReactNativeWebView.postMessage(JSON.stringify(obj)); }
+
+    function reportHeight() {
+      setTimeout(function() {
+        var el = document.getElementById('chart');
+        var h = el ? el.offsetHeight : 0;
+        if (h > 0) msg({ height: h });
+      }, 200);
+    }
+
+    function renderChart() {
+      try {
+        var raw = decodeURIComponent(escape(atob(CHART_B64)));
+        var chartData = JSON.parse(raw);
+
+        var xaxis = Object.assign({}, chartData.layout && chartData.layout.xaxis || {}, {
+          tickangle: -45,
+          automargin: true,
+          fixedrange: true
+        });
+        var yaxis = Object.assign({}, chartData.layout && chartData.layout.yaxis || {}, {
+          automargin: true,
+          fixedrange: true
+        });
+
+        var layout = Object.assign({}, chartData.layout || {}, {
+          width: ${chartWidth},
+          height: ${chartHeight},
+          autosize: false,
+          margin: { l: 0, r: 0, t: 40, b: 0, pad: 0, autoexpand: true },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          font: { size: ${fontSize} },
+          xaxis: xaxis,
+          yaxis: yaxis,
+          legend: {
+            orientation: 'h',
+            yanchor: 'top',
+            y: -0.2,
+            xanchor: 'center',
+            x: 0.5,
+            font: { size: ${Math.max(8, fontSize - 1)} }
+          },
+          dragmode: false
+        });
+
+        document.getElementById('status').style.display = 'none';
+
+        Plotly.newPlot('chart', chartData.data, layout, {
+          responsive: false,
+          displayModeBar: false,
+          displaylogo: false,
+          scrollZoom: false,
+          staticPlot: false
+        }).then(function() {
+          reportHeight();
+          var gd = document.getElementById('chart');
+          gd.on('plotly_relayout', function() { setTimeout(reportHeight, 100); });
+          gd.on('plotly_afterplot', function() { setTimeout(reportHeight, 100); });
+        });
+      } catch(e) {
+        document.getElementById('status').innerText = 'Chart error: ' + e.message;
+        msg({ height: 60, error: e.message });
+      }
+    }
+
+    // Load Plotly with retry
+    var retries = 0;
+    function loadPlotly() {
+      var script = document.createElement('script');
+      script.src = 'https://cdn.plot.ly/plotly-2.35.0.min.js';
+      script.onload = function() { setTimeout(renderChart, 50); };
+      script.onerror = function() {
+        retries++;
+        if (retries <= 2) {
+          document.getElementById('status').innerText = 'Retrying chart load...';
+          setTimeout(loadPlotly, 1000 * retries);
+        } else {
+          document.getElementById('status').innerText = 'Failed to load chart library. Check your connection.';
+          msg({ height: 60, error: 'CDN load failed' });
+        }
+      };
+      document.head.appendChild(script);
+    }
+    loadPlotly();
+  </script>
+</body>
+</html>`;
+  }, [chartJsonB64, chartWidth, chartHeight, fontSize]);
+
+  if (!chartJsonB64) {
     return (
-      <View style={styles.fallback}>
-        <Text style={styles.fallbackText}>Could not parse chart data</Text>
+      <View style={[styles.chartContainer, { padding: 16 }]}>
+        <Text style={{ color: colors.textSecondary, textAlign: "center" }}>
+          Could not parse chart data
+        </Text>
       </View>
     );
   }
 
-  const trace = parsed.data?.[0];
-  if (!trace) {
-    return (
-      <View style={styles.fallback}>
-        <Text style={styles.fallbackText}>No chart data available</Text>
-      </View>
-    );
-  }
-
-  const title = parsed.layout?.title?.text || parsed.layout?.title || "";
-  const chartType = trace.type || "bar";
-
-  // --- Pie Chart ---
-  if (chartType === "pie") {
-    const labels: string[] = Array.isArray(trace.labels) ? trace.labels : [];
-    const values: number[] = Array.isArray(trace.values)
-      ? trace.values.map((v: any) => (typeof v === "number" ? v : Number(v) || 0))
-      : [];
-    const pieData = labels.map((label: string, i: number) => ({
-      value: values[i] || 0,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-      text: truncateLabel(label, 12),
-      textColor: "#fff",
-      textSize: 10,
-    }));
-
-    return (
-      <View style={styles.chartContainer}>
-        {title ? <Text style={styles.title}>{title}</Text> : null}
-        <View style={styles.centered}>
-          <PieChart
-            data={pieData}
-            donut
-            radius={100}
-            innerRadius={50}
-            showText
-            textSize={9}
-            focusOnPress
-          />
-        </View>
-        <View style={styles.legend}>
-          {labels.map((label: string, i: number) => (
-            <View key={i} style={styles.legendItem}>
-              <View
-                style={[
-                  styles.legendDot,
-                  { backgroundColor: CHART_COLORS[i % CHART_COLORS.length] },
-                ]}
-              />
-              <Text style={styles.legendText} numberOfLines={1}>
-                {label}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
-  }
-
-  // --- Bar & Line Charts ---
-  const xValues: any[] = Array.isArray(trace.x) ? trace.x : [];
-  const yValues: number[] = Array.isArray(trace.y)
-    ? trace.y.map((v: any) => (typeof v === "number" ? v : Number(v) || 0))
-    : [];
-
-  if (xValues.length === 0 && yValues.length === 0) {
-    return (
-      <View style={styles.fallback}>
-        <Text style={styles.fallbackText}>No chart data available</Text>
-      </View>
-    );
-  }
-
-  const barData = xValues.map((x: any, i: number) => ({
-    value: yValues[i] || 0,
-    label: truncateLabel(String(x), 8),
-    frontColor: CHART_COLORS[i % CHART_COLORS.length],
-    topLabelComponent: () => (
-      <Text style={styles.barLabel}>{formatValue(yValues[i])}</Text>
-    ),
-  }));
-
-  const maxValue = Math.max(...yValues.filter((v) => typeof v === "number"), 0);
-  const yStep = computeStep(maxValue);
-
-  if (chartType === "scatter" || chartType === "line") {
-    const lineData = xValues.map((x: any, i: number) => ({
-      value: yValues[i] || 0,
-      label: truncateLabel(String(x), 8),
-      dataPointText: formatValue(yValues[i]),
-    }));
-
-    return (
-      <View style={styles.chartContainer}>
-        {title ? <Text style={styles.title}>{title}</Text> : null}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <LineChart
-            data={lineData}
-            width={Math.max(xValues.length * 60, 250)}
-            height={200}
-            color={colors.primary}
-            dataPointsColor={colors.primaryDark}
-            textColor={colors.textSecondary}
-            textFontSize={9}
-            xAxisLabelTextStyle={styles.axisLabel}
-            yAxisTextStyle={styles.axisLabel}
-            stepValue={yStep}
-            maxValue={yStep * Math.ceil(maxValue / yStep)}
-            noOfSections={4}
-            curved
-            areaChart
-            startFillColor={colors.primary}
-            startOpacity={0.2}
-            endOpacity={0}
-          />
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // Default: bar chart
   return (
-    <View style={styles.chartContainer}>
-      {title ? <Text style={styles.title}>{title}</Text> : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <BarChart
-          data={barData}
-          width={Math.max(xValues.length * 60, 250)}
-          height={200}
-          barWidth={32}
-          spacing={20}
-          xAxisLabelTextStyle={styles.axisLabel}
-          yAxisTextStyle={styles.axisLabel}
-          stepValue={yStep}
-          maxValue={yStep * Math.ceil(maxValue / yStep)}
-          noOfSections={4}
-          isAnimated
-        />
-      </ScrollView>
+    <View style={[styles.chartContainer, { height: webViewHeight + 24 }]}>
+      <WebView
+        originWhitelist={["*"]}
+        source={{ html }}
+        style={{ width: chartWidth, height: webViewHeight, backgroundColor: "transparent" }}
+        scrollEnabled={false}
+        nestedScrollEnabled
+        javaScriptEnabled
+        allowsInlineMediaPlayback
+        mixedContentMode="compatibility"
+        onMessage={(event: any) => {
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+            if (data.height) {
+              setWebViewHeight(data.height);
+            }
+            if (data.error) {
+              setError(data.error);
+            }
+          } catch {}
+        }}
+        onError={() => {
+          setError("WebView failed to load");
+        }}
+      />
+      {error && (
+        <Text style={{ color: colors.textTertiary, fontSize: 11, textAlign: "center", marginTop: 4 }}>
+          {error}
+        </Text>
+      )}
     </View>
   );
-}
-
-function truncateLabel(label: string, max: number): string {
-  return label.length > max ? label.slice(0, max - 1) + "\u2026" : label;
-}
-
-function formatValue(v: number): string {
-  if (v == null) return "";
-  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}k`;
-  if (Number.isInteger(v)) return String(v);
-  return v.toFixed(1);
-}
-
-function computeStep(max: number): number {
-  if (max <= 0) return 1;
-  const rough = max / 4;
-  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-  return Math.ceil(rough / mag) * mag;
 }
 
 // ---- Web implementation (unchanged) ----
@@ -255,60 +254,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: colors.surface,
-    padding: 12,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  centered: {
-    alignItems: "center",
-    marginVertical: 8,
-  },
-  legend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    marginTop: 12,
-    gap: 8,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 4,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  legendText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    maxWidth: 80,
-  },
-  axisLabel: {
-    fontSize: 9,
-    color: colors.textSecondary,
-  },
-  barLabel: {
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  fallback: {
-    padding: 20,
-    alignItems: "center",
-    backgroundColor: colors.primaryLight,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  fallbackText: {
-    color: colors.textSecondary,
-    fontSize: 13,
+    padding: 4,
   },
 });

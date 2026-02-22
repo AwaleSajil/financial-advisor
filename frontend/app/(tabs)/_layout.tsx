@@ -1,13 +1,17 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Pressable } from "react-native";
-import { Text } from "react-native-paper";
+import { View } from "react-native";
+import { Text, IconButton } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../src/providers/AuthProvider";
 import { colors } from "../../src/styles/theme";
 
 export default function TabLayout() {
   const { user, logout } = useAuth();
+
+  const displayName = user?.email?.split("@")[0] || "";
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -16,30 +20,38 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopColor: colors.surfaceBorder,
+          borderTopColor: colors.divider,
           borderTopWidth: 1,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 4,
+          paddingTop: 4,
+          elevation: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: "600",
         },
         headerStyle: {
           backgroundColor: colors.surface,
           borderBottomWidth: 1,
           borderBottomColor: colors.surfaceBorder,
+          elevation: 0,
         },
         headerTintColor: colors.text,
         headerTitleStyle: { fontWeight: "700" },
         headerRight: () => (
-          <Pressable
-            onPress={logout}
-            style={{ marginRight: 16, flexDirection: "row", alignItems: "center", gap: 4 }}
-          >
-            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-              {user?.email}
+          <View style={{ marginRight: 8, flexDirection: "row", alignItems: "center" }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, marginRight: 4 }}>
+              {displayName}
             </Text>
-            <MaterialCommunityIcons
-              name="logout"
-              size={18}
-              color={colors.textSecondary}
+            <IconButton
+              icon="logout"
+              size={20}
+              iconColor={colors.textSecondary}
+              onPress={logout}
+              style={{ margin: 0 }}
             />
-          </Pressable>
+          </View>
         ),
       }}
     >
@@ -47,10 +59,10 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: "Chat",
-          headerTitle: "MoneyRAG",
-          tabBarIcon: ({ color, size }) => (
+          headerTitle: "R2R",
+          tabBarIcon: ({ color, size, focused }) => (
             <MaterialCommunityIcons
-              name="chat-processing"
+              name={focused ? "message-text" : "message-text-outline"}
               size={size}
               color={color}
             />
@@ -60,11 +72,11 @@ export default function TabLayout() {
       <Tabs.Screen
         name="ingest"
         options={{
-          title: "Ingest Data",
-          headerTitle: "Ingest Data",
-          tabBarIcon: ({ color, size }) => (
+          title: "Files",
+          headerTitle: "Your Files",
+          tabBarIcon: ({ color, size, focused }) => (
             <MaterialCommunityIcons
-              name="file-upload"
+              name={focused ? "folder" : "folder-outline"}
               size={size}
               color={color}
             />
@@ -74,10 +86,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="config"
         options={{
-          title: "Config",
-          headerTitle: "Account Configuration",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="cog" size={size} color={color} />
+          title: "Settings",
+          headerTitle: "Settings",
+          tabBarIcon: ({ color, size, focused }) => (
+            <MaterialCommunityIcons
+              name={focused ? "cog" : "cog-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />

@@ -30,9 +30,8 @@ export function CameraCapture({
     if (!cameraRef.current || isTaking) return;
     setIsTaking(true);
     try {
-      const photo = await cameraRef.current.takePicture({
+      const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
-        skipProcessing: false,
       });
       const timestamp = Date.now();
       onCapture({
@@ -73,7 +72,10 @@ export function CameraCapture({
           style={styles.camera}
           facing={facing}
           flash={flash}
-        >
+        />
+
+        {/* Overlay controls on top of camera */}
+        <View style={styles.overlay}>
           {/* Top controls */}
           <View style={styles.topBar}>
             <IconButton
@@ -127,7 +129,7 @@ export function CameraCapture({
               />
             </View>
           </View>
-        </CameraView>
+        </View>
       </View>
     </Modal>
   );
@@ -139,7 +141,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   camera: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   topBar: {
     flexDirection: "row",

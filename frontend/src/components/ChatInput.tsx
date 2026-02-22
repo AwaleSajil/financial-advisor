@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TextInput, IconButton } from "react-native-paper";
-import { colors } from "../styles/theme";
+import { colors, spacing } from "../styles/theme";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -27,9 +27,11 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         onChangeText={setText}
         onSubmitEditing={handleSend}
         disabled={disabled}
+        multiline
         style={styles.input}
         outlineStyle={styles.outline}
         contentStyle={styles.inputContent}
+        textColor={colors.text}
         dense
       />
       <IconButton
@@ -37,7 +39,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         mode="contained"
         iconColor="#fff"
         containerColor={colors.primary}
-        size={22}
+        size={24}
         onPress={handleSend}
         disabled={disabled || !text.trim()}
         style={styles.sendButton}
@@ -49,26 +51,28 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    alignItems: "flex-end",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.surfaceBorder,
   },
   input: {
     flex: 1,
-    backgroundColor: colors.surface,
-    marginRight: 8,
+    backgroundColor: colors.surfaceSubtle,
+    marginRight: spacing.sm,
+    maxHeight: 120,
   },
   outline: {
     borderRadius: 12,
     borderColor: colors.border,
   },
   inputContent: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   sendButton: {
     margin: 0,
+    marginBottom: 2,
   },
 });

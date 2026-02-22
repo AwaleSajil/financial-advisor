@@ -1,10 +1,9 @@
 import React from "react";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import Markdown from "react-native-markdown-display";
-import { ToolTrace } from "./ToolTrace";
 import { PlotlyChart } from "./PlotlyChart";
-import { colors } from "../styles/theme";
+import { colors, typography, spacing } from "../styles/theme";
 import type { ChatMessage as ChatMessageType } from "../lib/types";
 
 interface ChatMessageProps {
@@ -16,18 +15,35 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <View style={[styles.container, isUser ? styles.userContainer : styles.assistantContainer]}>
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-        {message.toolTraces && message.toolTraces.length > 0 && (
-          <ToolTrace traces={message.toolTraces} />
+      <Text style={[styles.roleLabel, isUser ? styles.userLabel : styles.assistantLabel]}>
+        {isUser ? "You" : "R2R"}
+      </Text>
+      <View style={[
+        styles.bubble,
+        isUser ? styles.userBubble : styles.assistantBubble,
+        !isUser && message.charts && message.charts.length > 0 && styles.wideBubble,
+      ]}>
+        {message.content?.trim() ? (
+          <Markdown
+            style={isUser ? markdownStylesUser : markdownStylesAssistant}
+          >
+            {message.content}
+          </Markdown>
+        ) : message.charts && message.charts.length > 0 ? (
+          <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 4 }}>
+            Here's what I found:
+          </Text>
+        ) : null}
+        {message.charts && message.charts.length > 0 && (
+          <View>
+            {message.charts.map((chartJson, i) => (
+              <PlotlyChart key={i} chartJson={chartJson} />
+            ))}
+            {Platform.OS !== "web" && (
+              <Text style={styles.chartHint}>Tap a data point for details</Text>
+            )}
+          </View>
         )}
-        <Markdown
-          style={isUser ? markdownStylesUser : markdownStylesAssistant}
-        >
-          {message.content}
-        </Markdown>
-        {message.charts?.map((chartJson, i) => (
-          <PlotlyChart key={i} chartJson={chartJson} />
-        ))}
         {message.images && message.images.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow}>
             {message.images.map((url, i) => (
@@ -47,8 +63,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   userContainer: {
     alignItems: "flex-end",
@@ -56,23 +72,38 @@ const styles = StyleSheet.create({
   assistantContainer: {
     alignItems: "flex-start",
   },
+  roleLabel: {
+    ...typography.caption,
+    marginBottom: 2,
+    marginHorizontal: spacing.xs,
+  },
+  userLabel: {
+    color: colors.textTertiary,
+  },
+  assistantLabel: {
+    color: colors.primary,
+  },
   bubble: {
     maxWidth: "85%",
     borderRadius: 16,
-    padding: 14,
+    padding: 16,
   },
   userBubble: {
     backgroundColor: colors.userBubble,
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 6,
   },
   assistantBubble: {
     backgroundColor: colors.assistantBubble,
-    borderBottomLeftRadius: 4,
+    borderBottomLeftRadius: 6,
     borderWidth: 1,
     borderColor: colors.surfaceBorder,
   },
+  wideBubble: {
+    maxWidth: "98%",
+    paddingHorizontal: 8,
+  },
   imageRow: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   receiptImage: {
     width: 200,
@@ -80,6 +111,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 8,
     backgroundColor: colors.surfaceBorder,
+  },
+  chartHint: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 2,
   },
 });
 

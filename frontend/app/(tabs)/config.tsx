@@ -3,9 +3,10 @@ import { StyleSheet, View, ScrollView } from "react-native";
 import { Text, TextInput, Button, Snackbar } from "react-native-paper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { ProviderModelPicker } from "../../src/components/ProviderModelPicker";
+import { ApiKeyHelp } from "../../src/components/ApiKeyHelp";
 import { LoadingSpinner } from "../../src/components/LoadingSpinner";
 import { useConfig } from "../../src/hooks/useConfig";
-import { colors } from "../../src/styles/theme";
+import { colors, typography, spacing } from "../../src/styles/theme";
 import { createLogger } from "../../src/lib/logger";
 
 const log = createLogger("ConfigScreen");
@@ -17,6 +18,7 @@ export default function ConfigScreen() {
   const [decodeModel, setDecodeModel] = useState("gemini-3-flash-preview");
   const [embeddingModel, setEmbeddingModel] = useState("gemini-embedding-001");
   const [apiKey, setApiKey] = useState("");
+  const [saved, setSaved] = useState(false);
   const [snackbar, setSnackbar] = useState({ visible: false, message: "", error: false });
 
   // Populate form when config loads
@@ -54,6 +56,8 @@ export default function ConfigScreen() {
     });
     if (ok) {
       log.info("Config saved successfully from UI");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
       setSnackbar({
         visible: true,
         message: "Configuration saved successfully!",
@@ -76,11 +80,12 @@ export default function ConfigScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.subtitle}>
-          Configure your AI providers and models here.
-        </Text>
-
-        <GlassCard>
+        {/* Section 1: Provider Selection */}
+        <GlassCard style={styles.section}>
+          <Text style={styles.sectionTitle}>AI Provider</Text>
+          <Text style={styles.sectionSubtitle}>
+            Choose your LLM provider and models
+          </Text>
           <ProviderModelPicker
             provider={provider}
             decodeModel={decodeModel}
@@ -89,32 +94,42 @@ export default function ConfigScreen() {
             onDecodeModelChange={setDecodeModel}
             onEmbeddingModelChange={setEmbeddingModel}
           />
-
-          <View style={styles.apiKeySection}>
-            <Text style={styles.label}>API Key</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="Enter your API key"
-              value={apiKey}
-              onChangeText={setApiKey}
-              secureTextEntry
-              style={styles.input}
-              outlineStyle={styles.outline}
-              dense
-            />
-          </View>
-
-          <Button
-            mode="contained"
-            onPress={handleSave}
-            loading={isSaving}
-            disabled={isSaving}
-            style={styles.saveButton}
-            labelStyle={styles.saveButtonLabel}
-          >
-            Save Configuration
-          </Button>
         </GlassCard>
+
+        {/* Section 2: API Key */}
+        <GlassCard style={styles.section}>
+          <Text style={styles.sectionTitle}>API Key</Text>
+          <Text style={styles.sectionSubtitle}>
+            Required to process your financial data
+          </Text>
+          <TextInput
+            mode="outlined"
+            placeholder="Enter your API key"
+            value={apiKey}
+            onChangeText={setApiKey}
+            secureTextEntry
+            style={styles.input}
+            outlineStyle={styles.outline}
+            dense
+          />
+          <ApiKeyHelp />
+        </GlassCard>
+
+        {/* Save Button */}
+        <Button
+          mode="contained"
+          onPress={handleSave}
+          loading={isSaving}
+          disabled={isSaving}
+          icon={saved ? "check" : undefined}
+          style={[
+            styles.saveButton,
+            saved && styles.saveButtonSuccess,
+          ]}
+          labelStyle={styles.saveButtonLabel}
+        >
+          {saved ? "Saved!" : "Save Configuration"}
+        </Button>
       </ScrollView>
 
       <Snackbar
@@ -137,22 +152,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
-  subtitle: {
-    fontSize: 14,
+  section: {
+    marginBottom: spacing.lg,
+  },
+  sectionTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  sectionSubtitle: {
+    ...typography.body2,
     color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  apiKeySection: {
-    marginTop: 16,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 4,
+    marginBottom: spacing.lg,
   },
   input: {
     backgroundColor: colors.surface,
@@ -164,10 +178,13 @@ const styles = StyleSheet.create({
   saveButton: {
     borderRadius: 10,
     backgroundColor: colors.primary,
-    marginTop: 20,
+    marginTop: spacing.sm,
+  },
+  saveButtonSuccess: {
+    backgroundColor: colors.success,
   },
   saveButtonLabel: {
     fontWeight: "600",
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
 });

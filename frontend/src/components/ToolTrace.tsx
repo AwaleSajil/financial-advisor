@@ -11,7 +11,7 @@ interface ToolTraceProps {
 
 function formatToolName(name: string): string {
   return name
-    .replace("money_rag_", "")
+    .replace("r2r_", "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

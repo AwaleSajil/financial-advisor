@@ -1,7 +1,8 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Text, IconButton } from "react-native-paper";
-import { colors } from "../styles/theme";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { colors, typography, spacing } from "../styles/theme";
 import type { FileItem } from "../lib/types";
 
 interface FileListItemProps {
@@ -10,25 +11,25 @@ interface FileListItemProps {
 }
 
 export function FileListItem({ file, onDelete }: FileListItemProps) {
-  const icon = file.type === "csv" ? "file-delimited" : "image";
+  const isCSV = file.type === "csv";
+  const iconName = isCSV ? "file-delimited" : "file-image";
+  const iconColor = isCSV ? colors.success : colors.warning;
 
   return (
     <View style={styles.container}>
-      <View style={styles.info}>
-        <Text style={styles.icon}>
-          {file.type === "csv" ? "\uD83D\uDCC4" : "\uD83D\uDDBC\uFE0F"}
+      <View style={[styles.iconCircle, { backgroundColor: isCSV ? "#dcfce7" : "#fef3c7" }]}>
+        <MaterialCommunityIcons name={iconName} size={20} color={iconColor} />
+      </View>
+      <View style={styles.textContainer}>
+        <Text style={styles.filename} numberOfLines={1}>
+          {file.filename}
         </Text>
-        <View style={styles.textContainer}>
-          <Text style={styles.filename} numberOfLines={1}>
-            {file.filename}
-          </Text>
-          <Text style={styles.date}>
-            Uploaded: {file.upload_date?.slice(0, 10) ?? "N/A"}
-          </Text>
-        </View>
+        <Text style={styles.date}>
+          {file.upload_date?.slice(0, 10) ?? "N/A"}
+        </Text>
       </View>
       <IconButton
-        icon="delete-outline"
+        icon="trash-can-outline"
         iconColor={colors.error}
         size={20}
         onPress={() => onDelete(file)}
@@ -41,35 +42,32 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.surfaceBorder,
     borderRadius: 12,
-    paddingLeft: 14,
-    paddingRight: 4,
-    paddingVertical: 4,
-    marginBottom: 8,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  info: {
-    flex: 1,
-    flexDirection: "row",
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
-    gap: 10,
-  },
-  icon: {
-    fontSize: 20,
+    justifyContent: "center",
+    marginRight: spacing.md,
   },
   textContainer: {
     flex: 1,
   },
   filename: {
-    fontSize: 14,
-    fontWeight: "600",
+    ...typography.subtitle2,
     color: colors.text,
   },
   date: {
-    fontSize: 12,
+    ...typography.caption,
     color: colors.textSecondary,
   },
 });

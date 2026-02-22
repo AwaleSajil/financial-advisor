@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { Platform } from "react-native";
 import { PaperProvider } from "react-native-paper";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "../src/providers/AuthProvider";
 import { theme } from "../src/styles/theme";
 import { LoadingSpinner } from "../src/components/LoadingSpinner";
@@ -49,10 +50,12 @@ log.info("App starting", { platform: Platform.OS });
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <PaperProvider theme={theme}>
-        <RootLayoutNav />
-      </PaperProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <PaperProvider theme={theme}>
+          <RootLayoutNav />
+        </PaperProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
