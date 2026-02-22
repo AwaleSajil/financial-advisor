@@ -14,7 +14,7 @@ logger = logging.getLogger("moneyrag.routers.chat")
 router = APIRouter()
 
 
-@router.post("/")
+@router.post("")
 async def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     logger.debug("Chat request from user_id=%s | message=%s", user["id"], body.message[:100])
 

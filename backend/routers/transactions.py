@@ -10,7 +10,7 @@ logger = logging.getLogger("moneyrag.routers.transactions")
 router = APIRouter()
 
 
-@router.post("/", response_model=TransactionResponse)
+@router.post("", response_model=TransactionResponse)
 async def create_transaction(
     body: TransactionCreate,
     user: dict = Depends(get_current_user),

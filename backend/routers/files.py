@@ -12,7 +12,7 @@ logger = logging.getLogger("moneyrag.routers.files")
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 async def list_files(user: dict = Depends(get_current_user)):
     logger.debug("Listing files for user_id=%s", user["id"])
     try:

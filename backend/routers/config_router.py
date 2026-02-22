@@ -11,7 +11,7 @@ logger = logging.getLogger("moneyrag.routers.config")
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 async def get_config(user: dict = Depends(get_current_user)):
     logger.debug("GET config for user_id=%s", user["id"])
     config = await config_service.get_config(user)
@@ -23,7 +23,7 @@ async def get_config(user: dict = Depends(get_current_user)):
     return config
 
 
-@router.put("/")
+@router.put("")
 async def update_config(body: ConfigUpdate, user: dict = Depends(get_current_user)):
     logger.debug(
         "PUT config for user_id=%s — provider=%s, model=%s",
