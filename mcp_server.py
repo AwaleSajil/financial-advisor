@@ -258,9 +258,63 @@ def generate_interactive_chart(sql_query: str, chart_type: str, x_col: str, y_co
         
     except Exception as e:
         return f'{{"error": "Failed to generate chart: {str(e)}"}}'
+@mcp.tool()
+def get_bill_images(sql_query: str) -> str:
+    """
+    Get image URLs for specific uploaded bills and receipts so they can be displayed to the user in the UI.
+    IMPORTANT: You must provide a valid SQL SELECT query that targets the "Transaction" or "TransactionDetail" table,
+    and it MUST join or link to the "BillFile" table to retrieve the 's3_key' column.
+    
+    Example queries:
+    - Get receipt for transaction:
+      SELECT b.s3_key FROM "Transaction" t JOIN "BillFile" b ON t.source_bill_file_id = b.id WHERE t.user_id = '{user_id}' AND t.description LIKE '%McDonalds%'
+    - Get receipt for a specific line item:
+      SELECT b.s3_key FROM "TransactionDetail" d JOIN "BillFile" b ON d.bill_file_id = b.id WHERE d.user_id = '{user_id}' AND d.item_description LIKE '%Fries%'
+      
+    Args:
+        sql_query: The SQL SELECT query to retrieve the 's3_key' (string).
 
-
-
+    Returns:
+        JSON string containing the public image URLs.
+    """
+    try:
+        user_id = get_current_user_id()
+        if user_id not in sql_query:
+            return f'{{"error": "You forgot the WHERE user_id = \\"{user_id}\\" security clause!"}}'
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(sql_query)
+        results = cursor.fetchall()
+        conn.close()
+        
+        if not results:
+            return '{"error": "No bills found for this query."}'
+            
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY")
+        supabase = create_client(url, key)
+        
+        urls = []
+        for row in results:
+            if row[0]:
+                public_url = supabase.storage.from_("money-rag-files").get_public_url(row[0])
+                urls.append(public_url)
+                
+        if not urls:
+            return '{"error": "No image keys found in result set."}'
+            
+        import json
+        
+        # Write image URLs to a temp file that the main UI can pick up and render alongside the chat
+        chart_path = os.path.join(DATA_DIR, "latest_images.json")
+        with open(chart_path, "w") as f:
+            json.dump(urls, f)
+            
+        return "Images retrieved successfully! I have sent the image URLs to the user's UI. You can tell the user the receipt is attached."
+        
+    except Exception as e:
+        return f'{{"error": "Failed to retrieve images: {str(e)}"}}'
 
 if __name__ == "__main__":
     # Runs the server over stdio

@@ -444,9 +444,23 @@ def main_app_view():
 
                     # 4. Trigger the parsing, routing data to Supabase Postgres
                     if uploaded_files_info:
-                        asyncio.run(st.session_state.rag.setup_session(uploaded_files_info))
-                        st.success("Data uploaded, parsed, and vectorized securely!")
+                        duplicates = asyncio.run(st.session_state.rag.setup_session(uploaded_files_info))
+                        st.session_state.last_ingest_success = True
+                        st.session_state.last_ingest_duplicates = duplicates
                         st.rerun()
+
+        if st.session_state.get("last_ingest_success"):
+            st.success("Data uploaded, parsed, and vectorized securely!")
+            dups = st.session_state.get("last_ingest_duplicates", [])
+            if dups:
+                st.warning(f"Found {len(dups)} duplicate transaction(s) that were merged/skipped.")
+                with st.expander("View Duplicates"):
+                    st.dataframe(dups)
+            
+            if st.button("Dismiss"):
+                st.session_state.last_ingest_success = False
+                st.session_state.last_ingest_duplicates = []
+                st.rerun()
 
         st.divider()
         st.subheader("Your Uploaded Files")
@@ -554,25 +568,53 @@ def main_app_view():
             pass  # Don't break chat if the status check fails
 
 
-        # Helper function to cleverly render either text or a Plotly chart
+        # Helper function to cleverly render either text, a Plotly chart, or Images
         def render_content(content):
-            if isinstance(content, str) and "===CHART===" in content:
-                parts = content.split("===CHART===")
+            if not isinstance(content, str):
+                st.markdown(content)
+                return
+
+            remaining_text = content
+            
+            # Extract and render Images first (or charts, order doesn't strictly matter as long as we split right)
+            while "===IMAGES===" in remaining_text:
+                parts = remaining_text.split("===IMAGES===", 1)
                 st.markdown(parts[0].strip())
                 
-                for part in parts[1:]:
-                    if "===ENDCHART===" in part:
-                        chart_json, remaining_text = part.split("===ENDCHART===")
-                        try:
-                            fig = pio.from_json(chart_json.strip())
-                            st.plotly_chart(fig, use_container_width=True)
-                        except Exception as e:
-                            st.error("Failed to render chart.")
-                        
-                        if remaining_text.strip():
-                            st.markdown(remaining_text.strip())
-            else:
-                st.markdown(content)
+                if "===ENDIMAGES===" in parts[1]:
+                    images_json, remaining_text = parts[1].split("===ENDIMAGES===", 1)
+                    try:
+                        import json
+                        urls = json.loads(images_json.strip())
+                        if urls:
+                            # Display images in columns
+                            cols = st.columns(min(len(urls), 3))
+                            for idx, url in enumerate(urls):
+                                with cols[idx % 3]:
+                                    st.image(url, use_container_width=True)
+                    except Exception as e:
+                        st.error("Failed to render images.")
+                else:
+                    remaining_text = parts[1]
+                    break
+
+            while "===CHART===" in remaining_text:
+                parts = remaining_text.split("===CHART===", 1)
+                st.markdown(parts[0].strip())
+                
+                if "===ENDCHART===" in parts[1]:
+                    chart_json, remaining_text = parts[1].split("===ENDCHART===", 1)
+                    try:
+                        fig = pio.from_json(chart_json.strip())
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error("Failed to render chart.")
+                else:
+                    remaining_text = parts[1]
+                    break
+                    
+            if remaining_text.strip():
+                st.markdown(remaining_text.strip())
 
         # Render previous messages
         for message in st.session_state.messages:
