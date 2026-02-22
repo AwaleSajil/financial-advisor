@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 import { StyleSheet, View, FlatList, KeyboardAvoidingView, Platform } from "react-native";
 import { Banner } from "react-native-paper";
 import { useRouter } from "expo-router";
@@ -10,8 +10,12 @@ import { useChat } from "../../src/hooks/useChat";
 import { useFiles } from "../../src/hooks/useFiles";
 import { colors, spacing } from "../../src/styles/theme";
 import { createLogger } from "../../src/lib/logger";
+import type { ChatMessage as ChatMessageType } from "../../src/lib/types";
 
 const log = createLogger("ChatScreen");
+
+// Memoized row renderer — prevents re-rendering every message when a new one arrives
+const MemoizedChatMessage = React.memo(ChatMessage);
 
 export default function ChatScreen() {
   log.debug("ChatScreen rendered");
@@ -22,7 +26,7 @@ export default function ChatScreen() {
 
   const fileCount = files.length;
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages (longer delay for chart WebViews to mount)
   useEffect(() => {
     log.debug("Messages/streaming state changed", {
       messageCount: messages.length,
@@ -30,9 +34,20 @@ export default function ChatScreen() {
       fileCount: files.length,
     });
     if (messages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      const lastMsg = messages[messages.length - 1];
+      const hasChart = lastMsg?.charts && lastMsg.charts.length > 0;
+      // Charts need more time to mount their WebView before we can scroll accurately
+      const delay = hasChart ? 300 : 100;
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), delay);
     }
   }, [messages.length, isStreaming]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ChatMessageType }) => <MemoizedChatMessage message={item} />,
+    []
+  );
+
+  const keyExtractor = useCallback((_: ChatMessageType, i: number) => String(i), []);
 
   const wrapperProps = Platform.OS === "ios"
     ? { style: styles.container, behavior: "padding" as const, keyboardVerticalOffset: 90 }
@@ -61,10 +76,14 @@ export default function ChatScreen() {
       <FlatList
         ref={flatListRef}
         data={messages}
-        keyExtractor={(_, i) => String(i)}
-        renderItem={({ item }) => <ChatMessage message={item} />}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.messagesList}
         keyboardShouldPersistTaps="handled"
+        // Keep chart WebViews alive when scrolled off-screen to avoid re-loading CDN
+        windowSize={7}
+        maxToRenderPerBatch={5}
+        removeClippedSubviews={false}
         ListEmptyComponent={
           <SuggestedPrompts onSelectPrompt={sendMessage} />
         }

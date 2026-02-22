@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View, Platform, useWindowDimensions } from "react-native";
+import { Animated, StyleSheet, View, Platform, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { colors } from "../styles/theme";
 
@@ -15,31 +15,65 @@ export function PlotlyChart({ chartJson }: PlotlyChartProps) {
   return <PlotlyChartNative chartJson={chartJson} />;
 }
 
+// ---- Loading skeleton shown while Plotly CDN loads ----
+
+function ChartSkeleton({ width, height }: { width: number; height: number }) {
+  const pulseAnim = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+
+  return (
+    <View style={[styles.skeletonContainer, { width, height }]}>
+      {/* Title bar */}
+      <Animated.View style={[styles.skeletonBlock, { opacity: pulseAnim, width: "55%", height: 12, marginBottom: 16 }]} />
+      {/* Chart area */}
+      <Animated.View style={[styles.skeletonBlock, { opacity: pulseAnim, width: "100%", height: height * 0.55, borderRadius: 6 }]} />
+      {/* Legend dots */}
+      <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 12, gap: 16 }}>
+        <Animated.View style={[styles.skeletonBlock, { opacity: pulseAnim, width: 50, height: 8 }]} />
+        <Animated.View style={[styles.skeletonBlock, { opacity: pulseAnim, width: 50, height: 8 }]} />
+        <Animated.View style={[styles.skeletonBlock, { opacity: pulseAnim, width: 50, height: 8 }]} />
+      </View>
+    </View>
+  );
+}
+
 // ---- Native implementation using WebView + Plotly.js ----
 
 function PlotlyChartNative({ chartJson }: { chartJson: string }) {
   const { WebView } = require("react-native-webview");
   const { width: screenWidth } = useWindowDimensions();
-  const [webViewHeight, setWebViewHeight] = React.useState(320);
+  const [webViewHeight, setWebViewHeight] = React.useState(0);
+  const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Detect chart type for layout adjustments
-  const chartType = React.useMemo(() => {
+  // Parse chart metadata once for layout decisions
+  const chartMeta = React.useMemo(() => {
     try {
       const parsed = JSON.parse(chartJson);
       const firstTrace = parsed.data?.[0];
-      return firstTrace?.type || "bar";
+      const type = firstTrace?.type || "bar";
+      return { type };
     } catch {
-      return "bar";
+      return { type: "bar" as const };
     }
   }, [chartJson]);
 
-  const isPie = chartType === "pie";
+  const isPie = chartMeta.type === "pie";
 
   // Full-width chart with minimal padding for mobile
   const bubbleContentWidth = Math.floor(screenWidth * 0.96) - 16;
   const chartWidth = Math.max(bubbleContentWidth, 200);
-  // Shorter aspect ratio for mobile: pie charts are squarer, bar/line are wider
+  // Shorter aspect ratio for mobile; pie charts are squarer, bar/line are wider
   const chartHeight = isPie
     ? Math.round(chartWidth * 0.75)
     : Math.round(chartWidth * 0.65);
@@ -68,17 +102,17 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: transparent; overflow: hidden; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
     #chart { width: ${chartWidth}px; }
-    #status { color: #888; text-align: center; padding: 20px; font-size: 13px; }
-    /* Hide modebar on mobile — not useful for touch */
+    #status { color: #888; text-align: center; padding: 20px; font-size: 13px; display: none; }
+    /* Hide modebar on mobile */
     .modebar { display: none !important; }
-    /* Improve touch target for pie slices and bar segments */
-    .trace { cursor: pointer; }
     /* Prevent text selection on chart */
     .plot-container { -webkit-user-select: none; user-select: none; }
+    /* Improve touch targets */
+    .point, .slice { cursor: pointer; }
   </style>
 </head>
 <body>
-  <div id="status">Loading chart...</div>
+  <div id="status"></div>
   <div id="chart"></div>
   <script>
     var CHART_B64 = "${chartJsonB64}";
@@ -89,47 +123,59 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
       setTimeout(function() {
         var el = document.getElementById('chart');
         var h = el ? el.offsetHeight : 0;
-        if (h > 0) msg({ height: h });
+        if (h > 0) msg({ type: 'height', height: h });
       }, 150);
     }
 
     function truncateLabel(text, maxLen) {
       if (!text || typeof text !== 'string') return text;
-      return text.length > maxLen ? text.substring(0, maxLen - 1) + '…' : text;
+      return text.length > maxLen ? text.substring(0, maxLen - 1) + '\\u2026' : text;
     }
 
     function renderChart() {
       try {
         var raw = decodeURIComponent(escape(atob(CHART_B64)));
         var chartData = JSON.parse(raw);
-        var isPie = chartData.data && chartData.data[0] && chartData.data[0].type === 'pie';
+        var traceType = chartData.data && chartData.data[0] && chartData.data[0].type;
+        var isPie = traceType === 'pie';
+        var isLine = traceType === 'scatter' || traceType === 'line';
 
-        // Truncate long x-axis labels for bar/line charts on mobile
+        // Bar/line/scatter trace optimizations
         if (!isPie && chartData.data) {
           chartData.data.forEach(function(trace) {
             if (trace.x && Array.isArray(trace.x)) {
               trace.x = trace.x.map(function(v) { return truncateLabel(String(v), 16); });
             }
-            // Add hover info for better mobile tap experience
             trace.hoverinfo = trace.hoverinfo || 'x+y+text';
+
+            // Line charts: thicker lines + visible markers for touch
+            if (isLine) {
+              trace.line = Object.assign({}, trace.line || {}, { width: 3 });
+              trace.marker = Object.assign({}, trace.marker || {}, { size: 8 });
+              trace.mode = trace.mode || 'lines+markers';
+            }
+
+            // Bar charts: subtle separator between bars
+            if (traceType === 'bar') {
+              trace.marker = Object.assign({}, trace.marker || {}, {
+                line: { width: 0.5, color: 'rgba(255,255,255,0.3)' }
+              });
+            }
           });
         }
 
         // Pie chart mobile optimizations
         if (isPie && chartData.data) {
           chartData.data.forEach(function(trace) {
-            // Move labels outside for readability, show % only
             trace.textposition = 'outside';
             trace.textinfo = 'label+percent';
             trace.textfont = { size: ${fontSize} };
             trace.outsidetextfont = { size: ${Math.max(8, fontSize - 1)} };
             trace.insidetextorientation = 'horizontal';
-            // Truncate long pie labels
             if (trace.labels && Array.isArray(trace.labels)) {
               trace.labels = trace.labels.map(function(v) { return truncateLabel(String(v), 14); });
             }
             trace.hoverinfo = 'label+value+percent';
-            // Slight pull for visual separation
             trace.pull = 0.02;
             trace.hole = 0.3;
           });
@@ -144,7 +190,9 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
         var yaxis = Object.assign({}, chartData.layout && chartData.layout.yaxis || {}, {
           automargin: true,
           fixedrange: true,
-          tickfont: { size: ${Math.max(8, fontSize - 1)} }
+          tickfont: { size: ${Math.max(8, fontSize - 1)} },
+          gridcolor: 'rgba(0,0,0,0.06)',
+          zerolinecolor: 'rgba(0,0,0,0.1)'
         });
 
         var layout = Object.assign({}, chartData.layout || {}, {
@@ -158,9 +206,12 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           plot_bgcolor: 'transparent',
           font: { size: ${fontSize}, color: '#374151' },
           title: chartData.layout && chartData.layout.title ? {
-            text: typeof chartData.layout.title === 'string'
-              ? chartData.layout.title
-              : (chartData.layout.title.text || ''),
+            text: truncateLabel(
+              typeof chartData.layout.title === 'string'
+                ? chartData.layout.title
+                : (chartData.layout.title.text || ''),
+              40
+            ),
             font: { size: ${fontSize + 2}, color: '#1e1e3a' },
             x: 0.5,
             xanchor: 'center',
@@ -182,11 +233,12 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           hoverlabel: {
             bgcolor: '#1e1e3a',
             bordercolor: '#6366f1',
-            font: { size: ${fontSize}, color: '#fff', family: '-apple-system, sans-serif' }
-          }
+            font: { size: ${fontSize + 1}, color: '#fff', family: '-apple-system, sans-serif' },
+            namelength: -1
+          },
+          bargap: 0.2,
+          bargroupgap: 0.1
         });
-
-        document.getElementById('status').style.display = 'none';
 
         Plotly.newPlot('chart', chartData.data, layout, {
           responsive: false,
@@ -195,30 +247,34 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           scrollZoom: false,
           staticPlot: false
         }).then(function() {
+          msg({ type: 'loaded' });
           reportHeight();
           var gd = document.getElementById('chart');
           gd.on('plotly_afterplot', function() { setTimeout(reportHeight, 100); });
         });
       } catch(e) {
+        document.getElementById('status').style.display = 'block';
         document.getElementById('status').innerText = 'Chart error: ' + e.message;
-        msg({ height: 60, error: e.message });
+        msg({ type: 'error', height: 60, error: e.message });
       }
     }
 
-    // Load Plotly with retry
+    // Load plotly-basic (smaller: ~1MB vs ~3.5MB full bundle)
     var retries = 0;
     function loadPlotly() {
       var script = document.createElement('script');
-      script.src = 'https://cdn.plot.ly/plotly-2.35.0.min.js';
+      script.src = 'https://cdn.plot.ly/plotly-basic-2.35.0.min.js';
       script.onload = function() { setTimeout(renderChart, 50); };
       script.onerror = function() {
         retries++;
         if (retries <= 2) {
+          document.getElementById('status').style.display = 'block';
           document.getElementById('status').innerText = 'Retrying chart load...';
           setTimeout(loadPlotly, 1000 * retries);
         } else {
-          document.getElementById('status').innerText = 'Failed to load chart library. Check your connection.';
-          msg({ height: 60, error: 'CDN load failed' });
+          document.getElementById('status').style.display = 'block';
+          document.getElementById('status').innerText = 'Failed to load chart library.';
+          msg({ type: 'error', height: 60, error: 'CDN load failed' });
         }
       };
       document.head.appendChild(script);
@@ -239,29 +295,43 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
     );
   }
 
+  // Estimated height while loading (avoids layout jump when WebView reports real height)
+  const displayHeight = isLoading ? chartHeight + 40 : webViewHeight;
+
   return (
-    <View style={[styles.chartContainer, { height: webViewHeight + 24 }]}>
+    <View style={[styles.chartContainer, { height: displayHeight + 16 }]}>
+      {isLoading && <ChartSkeleton width={chartWidth} height={chartHeight} />}
       <WebView
         originWhitelist={["*"]}
         source={{ html }}
-        style={{ width: chartWidth, height: webViewHeight, backgroundColor: "transparent" }}
+        style={[
+          { width: chartWidth, height: displayHeight, backgroundColor: "transparent" },
+          isLoading && { position: "absolute", opacity: 0 },
+        ]}
         scrollEnabled={false}
         nestedScrollEnabled
         javaScriptEnabled
         allowsInlineMediaPlayback
         mixedContentMode="compatibility"
+        cacheEnabled
+        cacheMode="LOAD_CACHE_ELSE_NETWORK"
         onMessage={(event: any) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
+            if (data.type === "loaded") {
+              setIsLoading(false);
+            }
             if (data.height) {
               setWebViewHeight(data.height);
             }
-            if (data.error) {
+            if (data.type === "error") {
+              setIsLoading(false);
               setError(data.error);
             }
           } catch {}
         }}
         onError={() => {
+          setIsLoading(false);
           setError("WebView failed to load");
         }}
       />
@@ -327,5 +397,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: colors.surface,
     padding: 4,
+  },
+  skeletonContainer: {
+    padding: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  skeletonBlock: {
+    backgroundColor: colors.surfaceBorder,
+    borderRadius: 4,
   },
 });
