@@ -16,8 +16,9 @@ RUN npm ci
 # Copy frontend source and build for web
 COPY frontend/ ./
 
-# No frontend env vars needed — API URL uses relative path (same origin),
-# Supabase config is fetched at runtime from /api/v1/public-config
+# Remove any .env that may have been copied — in production the API URL
+# must resolve to a relative path (/api/v1), not a hardcoded http:// URL.
+RUN rm -f .env .env.local .env.*
 
 # Export static web build
 RUN npx expo export --platform web
