@@ -26,6 +26,8 @@ AI-powered financial transaction analysis using RAG (Retrieval-Augmented Generat
 
 ## Architecture
 
+  <img width="900" height="594" alt="architecture" src="https://github.com/user-attachments/assets/f432c094-dc59-4046-aee6-607e278d3917" />
+
 - **Frontend**: Expo (React Native Web) - serves as static build in production
 - **Backend**: FastAPI wrapping the RAG engine
 - **RAG Engine**: LangChain + LangGraph with MCP tool server
@@ -33,7 +35,6 @@ AI-powered financial transaction analysis using RAG (Retrieval-Augmented Generat
 - **Vector DB**: Actian Vector DB for semantic search (multi-tenant via user_id). Qdrant Cloud available as an alternative.
 - **Database**: Databricks SQL Warehouse for structured transaction queries. Supabase PostgreSQL available as an alternative.
 
-  <img width="900" height="594" alt="architecture" src="https://github.com/user-attachments/assets/f432c094-dc59-4046-aee6-607e278d3917" />
 
 
 ## Environment Variables
