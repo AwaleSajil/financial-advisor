@@ -129,25 +129,35 @@ async def public_config():
 # --- Serve Expo web build as static files (for Docker / HF Spaces) ---
 _static_dir = Path(__file__).resolve().parent.parent / "static"
 if _static_dir.is_dir():
-    from starlette.responses import FileResponse, Response
+    from starlette.responses import FileResponse
 
     logger.info("Serving static frontend from %s", _static_dir)
 
-    # Mount static assets (JS/CSS/images) at /_expo so they don't conflict with API
+    # Mount known static asset directories so they're served directly
     app.mount("/_expo", StaticFiles(directory=str(_static_dir / "_expo")), name="expo-assets")
+    if (_static_dir / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_static_dir / "assets")), name="static-assets")
 
-    # Serve static assets (fonts, images, etc.) that aren't under /_expo
-    app.mount("/assets", StaticFiles(directory=str(_static_dir / "assets")), name="static-assets")
+    # SPA fallback middleware: if the app returns 404 and the request is NOT
+    # for an API route, serve index.html (or the exact static file).
+    # Using middleware avoids the catch-all route / mount problems that shadow
+    # API routes registered via include_router.
+    @app.middleware("http")
+    async def spa_fallback(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
 
-    # Catch-all: serve index.html for any non-API route (SPA client-side routing)
-    @app.api_route("/{full_path:path}", methods=["GET"], include_in_schema=False)
-    async def serve_spa(request: Request, full_path: str):
-        # Never intercept API routes
-        if full_path.startswith("api/"):
-            return Response(status_code=404)
-        # Try to serve the exact static file first
-        file_path = _static_dir / full_path
-        if full_path and file_path.is_file():
-            return FileResponse(file_path)
-        # Otherwise serve index.html (SPA fallback)
-        return FileResponse(_static_dir / "index.html")
+        # Only intercept 404s for non-API GET requests
+        if (
+            response.status_code == 404
+            and request.method == "GET"
+            and not path.startswith("/api/")
+        ):
+            # Try exact static file first
+            file_path = _static_dir / path.lstrip("/")
+            if file_path.is_file():
+                return FileResponse(file_path)
+            # SPA fallback
+            return FileResponse(_static_dir / "index.html")
+
+        return response
