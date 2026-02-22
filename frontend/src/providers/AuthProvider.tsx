@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { supabase } from "../lib/supabase";
+import { getSupabase } from "../lib/supabase";
 import * as authService from "../services/authService";
 import { createLogger } from "../lib/logger";
 import type { User } from "../lib/types";
@@ -33,50 +33,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     log.info("Checking for existing session on mount...");
 
-    // Check for existing session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        log.info("Existing session found", {
-          userId: session.user.id,
-          email: session.user.email,
-          tokenExpiry: session.expires_at,
-        });
-        setUser({ id: session.user.id, email: session.user.email! });
-        setToken(session.access_token);
-        AsyncStorage.setItem("access_token", session.access_token);
-      } else {
-        log.info("No existing session found");
-      }
-      setLoading(false);
-    });
+    let subscription: { unsubscribe: () => void } | null = null;
 
-    // Listen for auth state changes (token refresh, etc.)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      log.info("Auth state changed", {
-        event,
-        hasSession: !!session,
-        userId: session?.user?.id,
-        email: session?.user?.email,
+    getSupabase().then((supabase) => {
+      // Check for existing session on mount
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          log.info("Existing session found", {
+            userId: session.user.id,
+            email: session.user.email,
+            tokenExpiry: session.expires_at,
+          });
+          setUser({ id: session.user.id, email: session.user.email! });
+          setToken(session.access_token);
+          AsyncStorage.setItem("access_token", session.access_token);
+        } else {
+          log.info("No existing session found");
+        }
+        setLoading(false);
       });
 
-      if (session?.user) {
-        setUser({ id: session.user.id, email: session.user.email! });
-        setToken(session.access_token);
-        AsyncStorage.setItem("access_token", session.access_token);
-        log.debug("Token stored in AsyncStorage");
-      } else {
-        log.info("Session cleared - user logged out");
-        setUser(null);
-        setToken(null);
-        AsyncStorage.removeItem("access_token");
-      }
+      // Listen for auth state changes (token refresh, etc.)
+      const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        log.info("Auth state changed", {
+          event,
+          hasSession: !!session,
+          userId: session?.user?.id,
+          email: session?.user?.email,
+        });
+
+        if (session?.user) {
+          setUser({ id: session.user.id, email: session.user.email! });
+          setToken(session.access_token);
+          AsyncStorage.setItem("access_token", session.access_token);
+          log.debug("Token stored in AsyncStorage");
+        } else {
+          log.info("Session cleared - user logged out");
+          setUser(null);
+          setToken(null);
+          AsyncStorage.removeItem("access_token");
+        }
+      });
+      subscription = data.subscription;
     });
 
     return () => {
       log.debug("Unsubscribing auth state listener");
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, []);
 

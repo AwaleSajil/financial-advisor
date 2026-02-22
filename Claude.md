@@ -1,1 +1,1 @@
-- Developing this application for android specifically using expo 
+<!-- - Developing this application for android specifically using expo  -->

@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { getSupabase } from "../lib/supabase";
 import { apiJson } from "./api";
 import { createLogger } from "../lib/logger";
 import type { User } from "../lib/types";
@@ -17,6 +17,7 @@ export async function login(
   log.info("Login attempt", { email });
 
   // Use Supabase JS directly for auth (handles token refresh)
+  const supabase = await getSupabase();
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -62,6 +63,7 @@ export async function register(
 ): Promise<{ message: string }> {
   log.info("Register attempt", { email });
 
+  const supabase = await getSupabase();
   const { data, error } = await supabase.auth.signUp({ email, password });
 
   if (error) {
@@ -96,6 +98,7 @@ export async function register(
 
 export async function logout(): Promise<void> {
   log.info("Logout initiated");
+  const supabase = await getSupabase();
   await supabase.auth.signOut();
   log.info("Supabase signOut complete");
 }

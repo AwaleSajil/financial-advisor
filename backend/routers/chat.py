@@ -80,11 +80,28 @@ async def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
                             logger.warning("Found ===IMAGES=== without matching ===ENDIMAGES===")
                             break
 
+                    pending_transactions = []
+                    while "===CONFIRM_TX===" in content:
+                        pre, rest = content.split("===CONFIRM_TX===", 1)
+                        if "===ENDCONFIRM_TX===" in rest:
+                            tx_json, after = rest.split("===ENDCONFIRM_TX===", 1)
+                            content = pre + after
+                            try:
+                                tx_data = json.loads(tx_json.strip())
+                                pending_transactions.append(tx_data)
+                                logger.debug("Extracted pending transaction: %s", tx_data)
+                            except json.JSONDecodeError:
+                                logger.warning("Failed to parse pending transaction JSON")
+                        else:
+                            content = pre + rest
+                            logger.warning("Found ===CONFIRM_TX=== without matching ===ENDCONFIRM_TX===")
+                            break
+
                     logger.debug(
-                        "Final response: %d charts, %d images extracted, content length=%d",
-                        len(charts), len(images), len(content.strip()),
+                        "Final response: %d charts, %d images, %d pending_tx extracted, content length=%d",
+                        len(charts), len(images), len(pending_transactions), len(content.strip()),
                     )
-                    yield f"event: final\ndata: {json.dumps({'content': content.strip(), 'charts': charts, 'images': images})}\n\n"
+                    yield f"event: final\ndata: {json.dumps({'content': content.strip(), 'charts': charts, 'images': images, 'pendingTransactions': pending_transactions})}\n\n"
                 else:
                     yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
 

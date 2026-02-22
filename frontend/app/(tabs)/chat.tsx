@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback } from "react";
-import { StyleSheet, View, FlatList, KeyboardAvoidingView, Platform } from "react-native";
+import { StyleSheet, View, FlatList, KeyboardAvoidingView, Platform, useWindowDimensions } from "react-native";
 import { Banner } from "react-native-paper";
 import { useRouter } from "expo-router";
 import { ChatMessage } from "../../src/components/ChatMessage";
@@ -17,13 +17,17 @@ const log = createLogger("ChatScreen");
 // Memoized row renderer — prevents re-rendering every message when a new one arrives
 const MemoizedChatMessage = React.memo(ChatMessage);
 
+const MAX_CHAT_WIDTH = 720;
+
 export default function ChatScreen() {
   log.debug("ChatScreen rendered");
   const { messages, isStreaming, sendMessage } = useChat();
   const { files } = useFiles();
   const flatListRef = useRef<FlatList>(null);
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
 
+  const isWide = Platform.OS === "web" && screenWidth > MAX_CHAT_WIDTH;
   const fileCount = files.length;
 
   // Auto-scroll to bottom on new messages (longer delay for chart WebViews to mount)
@@ -53,6 +57,10 @@ export default function ChatScreen() {
     ? { style: styles.container, behavior: "padding" as const, keyboardVerticalOffset: 90 }
     : { style: styles.container, behavior: "padding" as const, keyboardVerticalOffset: 80 };
 
+  const responsiveStyle = isWide
+    ? { maxWidth: MAX_CHAT_WIDTH, width: "100%" as const, alignSelf: "center" as const }
+    : undefined;
+
   return (
     <KeyboardAvoidingView {...wrapperProps}>
       {/* File status banner */}
@@ -78,7 +86,7 @@ export default function ChatScreen() {
         data={messages}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        contentContainerStyle={styles.messagesList}
+        contentContainerStyle={[styles.messagesList, responsiveStyle]}
         keyboardShouldPersistTaps="handled"
         // Keep chart WebViews alive when scrolled off-screen to avoid re-loading CDN
         windowSize={7}
@@ -91,13 +99,17 @@ export default function ChatScreen() {
 
       {/* Streaming indicator */}
       {isStreaming && (
-        <View style={styles.streamingIndicator}>
+        <View style={[styles.streamingIndicator, responsiveStyle]}>
           <TypingIndicator />
         </View>
       )}
 
       {/* Chat input */}
-      <ChatInput onSend={sendMessage} disabled={isStreaming} />
+      <View style={isWide ? styles.inputWrapper : undefined}>
+        <View style={responsiveStyle}>
+          <ChatInput onSend={sendMessage} disabled={isStreaming} />
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -117,5 +129,8 @@ const styles = StyleSheet.create({
   streamingIndicator: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+  },
+  inputWrapper: {
+    alignItems: "center" as const,
   },
 });

@@ -1,11 +1,13 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from backend.routers import auth, config_router, files, chat
+from backend.routers import auth, config_router, files, chat, transactions
 from backend.services.rag_manager import rag_manager
 
 # ---------------------------------------------------------------------------
@@ -104,9 +106,58 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(config_router.router, prefix="/api/v1/config", tags=["config"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
+app.include_router(transactions.router, prefix="/api/v1/transactions", tags=["transactions"])
 
 
 @app.get("/api/v1/health")
 async def health():
     logger.debug("Health check hit")
     return {"status": "ok"}
+
+
+@app.get("/api/v1/public-config")
+async def public_config():
+    """Return public (non-secret) config for the frontend."""
+    from backend.config import get_settings
+    s = get_settings()
+    return {
+        "supabase_url": s.SUPABASE_URL,
+        "supabase_anon_key": s.SUPABASE_KEY,
+    }
+
+
+# --- Serve Expo web build as static files (for Docker / HF Spaces) ---
+_static_dir = Path(__file__).resolve().parent.parent / "static"
+if _static_dir.is_dir():
+    from starlette.responses import FileResponse
+
+    logger.info("Serving static frontend from %s", _static_dir)
+
+    # Mount known static asset directories so they're served directly
+    app.mount("/_expo", StaticFiles(directory=str(_static_dir / "_expo")), name="expo-assets")
+    if (_static_dir / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_static_dir / "assets")), name="static-assets")
+
+    # SPA fallback middleware: if the app returns 404 and the request is NOT
+    # for an API route, serve index.html (or the exact static file).
+    # Using middleware avoids the catch-all route / mount problems that shadow
+    # API routes registered via include_router.
+    @app.middleware("http")
+    async def spa_fallback(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+
+        # Only intercept 404s for non-API GET requests
+        if (
+            response.status_code == 404
+            and request.method == "GET"
+            and not path.startswith("/api/")
+        ):
+            # Try exact static file first
+            file_path = _static_dir / path.lstrip("/")
+            if file_path.is_file():
+                return FileResponse(file_path)
+            # SPA fallback
+            return FileResponse(_static_dir / "index.html")
+
+        return response

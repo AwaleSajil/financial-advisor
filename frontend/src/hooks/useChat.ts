@@ -66,6 +66,7 @@ export function useChat() {
               charts: data.charts?.length ? data.charts : undefined,
               images: data.images?.length ? data.images : undefined,
               toolTraces: toolTraces.length ? [...toolTraces] : undefined,
+              pendingTransactions: data.pendingTransactions?.length ? data.pendingTransactions : undefined,
             };
             setMessages((prev) => [...prev, assistantMsg]);
             setCurrentToolTraces([]);
