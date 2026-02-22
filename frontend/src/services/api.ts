@@ -9,18 +9,19 @@ function getApiUrl(): string {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   log.debug("getApiUrl called", { envUrl, platform: Platform.OS });
 
-  // If explicitly set to a non-localhost URL, use it as-is
-  if (envUrl && !envUrl.includes("localhost")) {
-    log.info("Using env API URL (non-localhost)", { url: envUrl });
-    return envUrl;
-  }
-
   if (Platform.OS === "web") {
-    // In production, always use relative path (same origin serves both).
+    // In production (Docker/HF Spaces), frontend and API share the same origin.
+    // Always use a relative path to avoid mixed-content (http vs https) issues.
     // Only honour envUrl for local dev (localhost).
     const url = envUrl && envUrl.includes("localhost") ? envUrl : "/api/v1";
     log.info("Web platform API URL", { url });
     return url;
+  }
+
+  // Native: if explicitly set to a non-localhost URL, use it as-is
+  if (envUrl && !envUrl.includes("localhost")) {
+    log.info("Using env API URL (non-localhost)", { url: envUrl });
+    return envUrl;
   }
 
   if (Platform.OS === "android") {
