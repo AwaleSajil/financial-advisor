@@ -20,6 +20,11 @@ COPY frontend/ ./
 # must resolve to a relative path (/api/v1), not a hardcoded http:// URL.
 RUN rm -f .env .env.local .env.*
 
+# Unset any API URL so the frontend uses a relative path (same-origin).
+# HF Spaces injects secrets as env vars during build — we must clear this
+# so Expo doesn't bake an http:// URL into the JS bundle.
+ENV EXPO_PUBLIC_API_URL=""
+
 # Export static web build
 RUN npx expo export --platform web
 
