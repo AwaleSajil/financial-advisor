@@ -26,7 +26,8 @@ ENV/
 .ipynb_checkpoints/
 *.ipynb
 
-# Environment files
+# Environment files — .env is loaded via HF Spaces secrets, not copied
+.env
 .env.local
 .env.*.local
 
@@ -65,3 +66,8 @@ ARCHITECTURE.md
 
 # Notebooks (testing only)
 notebooks/
+
+# Frontend build artifacts & deps (rebuilt in Docker)
+frontend/node_modules/
+frontend/dist/
+frontend/.expo/

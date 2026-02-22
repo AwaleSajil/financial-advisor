@@ -667,7 +667,13 @@ Return ONLY valid JSON with exactly these two fields:
                 "that includes: (1) a summary of the key numbers, (2) the top and bottom items, (3) any notable patterns or insights. "
                 "The chart appears below your text automatically — your text analysis is the PRIMARY response the user reads. "
                 "Never respond with just a single sentence when data is available. "
-                "WARNING: You MUST use the actual tool call to generate the chart. DO NOT output raw chart JSON in your text."
+                "WARNING: You MUST use the actual tool call to generate the chart. DO NOT output raw chart JSON in your text.\n"
+                "MANUAL TRANSACTIONS: When the user describes a transaction they made (e.g., 'I gave X $100', "
+                "'I spent $50 at Target', 'paid rent $1200'), you MUST use the 'propose_transaction' tool. "
+                "Extract the amount, description, date (default today), category, and merchant name from the user's message. "
+                "Do NOT insert transactions directly — always let the user confirm via the UI card. "
+                "CRITICAL: You MUST include the ===CONFIRM_TX=== marker output from the tool in your response EXACTLY as returned. "
+                "Do not remove or modify the marker content."
             )
             
             agent = create_agent(

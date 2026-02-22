@@ -1,8 +1,9 @@
-import React from "react";
-import { Image, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
-import { Text } from "react-native-paper";
+import React, { useState } from "react";
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { IconButton, Text } from "react-native-paper";
 import Markdown from "react-native-markdown-display";
 import { PlotlyChart } from "./PlotlyChart";
+import { TransactionConfirmCard } from "./TransactionConfirmCard";
 import { colors, typography, spacing } from "../styles/theme";
 import type { ChatMessage as ChatMessageType } from "../lib/types";
 
@@ -12,8 +13,9 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const hasCharts = message.charts && message.charts.length > 0;
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   // Scale receipt images based on screen width
   const imageWidth = Math.min(Math.floor(screenWidth * 0.45), 200);
@@ -53,14 +55,36 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {message.images && message.images.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow}>
             {message.images.map((url, i) => (
-              <Image
-                key={i}
-                source={{ uri: url }}
-                style={[styles.receiptImage, { width: imageWidth, height: imageHeight }]}
-                resizeMode="contain"
-              />
+              <Pressable key={i} onPress={() => setExpandedImage(url)}>
+                <Image
+                  source={{ uri: url }}
+                  style={[styles.receiptImage, { width: imageWidth, height: imageHeight }]}
+                  resizeMode="contain"
+                />
+              </Pressable>
             ))}
           </ScrollView>
+        )}
+        {expandedImage && (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setExpandedImage(null)}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setExpandedImage(null)}>
+              <View style={styles.modalHeader}>
+                <IconButton icon="close" iconColor="#fff" size={28} onPress={() => setExpandedImage(null)} />
+              </View>
+              <Image
+                source={{ uri: expandedImage }}
+                style={{ width: screenWidth * 0.95, height: screenHeight * 0.8 }}
+                resizeMode="contain"
+              />
+            </Pressable>
+          </Modal>
+        )}
+        {message.pendingTransactions && message.pendingTransactions.length > 0 && (
+          <View>
+            {message.pendingTransactions.map((tx, i) => (
+              <TransactionConfirmCard key={i} transaction={tx} />
+            ))}
+          </View>
         )}
       </View>
     </View>
@@ -122,6 +146,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
     marginBottom: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalHeader: {
+    position: "absolute",
+    top: 40,
+    right: 8,
+    zIndex: 1,
   },
 });
 

@@ -357,6 +357,68 @@ def get_bill_images(sql_query: str) -> str:
     except Exception as e:
         return f'{{"error": "Failed to retrieve images: {str(e)}"}}'
 
+@mcp.tool()
+def propose_transaction(
+    description: str,
+    amount: float,
+    date: Optional[str] = None,
+    category: Optional[str] = None,
+    merchant_name: Optional[str] = None,
+) -> str:
+    """
+    Propose a new manually-entered transaction for user confirmation.
+    Use this when the user tells you about a transaction in natural language,
+    such as "I gave Simran 100 dollars" or "I spent $50 on groceries today".
+
+    IMPORTANT: This tool does NOT insert anything into the database.
+    It returns a structured proposal that will be shown to the user for confirmation.
+    The user must explicitly confirm before the transaction is saved.
+
+    Args:
+        description: What the transaction was for (e.g., "Gave Simran", "Lunch at subway")
+        amount: The transaction amount as a positive number (spending is positive)
+        date: The date in YYYY-MM-DD format. If not specified, defaults to today.
+        category: Category like "Transfer", "Food", "Shopping", etc. Defaults to "Uncategorized".
+        merchant_name: Clean merchant/recipient name. Defaults to description.
+
+    Returns:
+        JSON string with the proposed transaction details for UI confirmation.
+    """
+    import json
+    from datetime import date as date_type
+
+    # Default date to today if not provided
+    if not date:
+        date = date_type.today().isoformat()
+
+    # Validate date format
+    try:
+        parsed = date_type.fromisoformat(date)
+        date = parsed.isoformat()
+    except ValueError:
+        return json.dumps({"error": f"Invalid date format: {date}. Use YYYY-MM-DD."})
+
+    # Validate amount
+    if amount <= 0:
+        return json.dumps({"error": "Amount must be positive."})
+
+    proposal = {
+        "description": description,
+        "amount": round(amount, 2),
+        "trans_date": date,
+        "category": category or "Uncategorized",
+        "merchant_name": merchant_name or description,
+    }
+
+    result = json.dumps(proposal)
+
+    return (
+        f"===CONFIRM_TX==={result}===ENDCONFIRM_TX===\n\n"
+        "I've prepared this transaction for your review. "
+        "Please check the details in the confirmation card and tap Confirm to save it."
+    )
+
+
 if __name__ == "__main__":
     # Runs the server over stdio
     mcp.run(transport="stdio")

@@ -20,12 +20,21 @@ export interface FileItem {
   type: "csv" | "bill";
 }
 
+export interface PendingTransaction {
+  description: string;
+  amount: number;
+  trans_date: string;
+  category: string;
+  merchant_name: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   charts?: string[];
   images?: string[];
   toolTraces?: ToolEvent[];
+  pendingTransactions?: PendingTransaction[];
 }
 
 export interface ToolEvent {

@@ -16,7 +16,8 @@ function getApiUrl(): string {
   }
 
   if (Platform.OS === "web") {
-    const url = envUrl || "http://localhost:8000/api/v1";
+    // In Docker/production, use relative path (same origin serves both)
+    const url = envUrl || "/api/v1";
     log.info("Web platform API URL", { url });
     return url;
   }

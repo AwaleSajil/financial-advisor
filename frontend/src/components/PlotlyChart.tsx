@@ -136,7 +136,11 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
       try {
         var raw = decodeURIComponent(escape(atob(CHART_B64)));
         var chartData = JSON.parse(raw);
-        var traceType = chartData.data && chartData.data[0] && chartData.data[0].type;
+        if (!chartData || !chartData.data || !Array.isArray(chartData.data)) {
+          throw new Error('Invalid chart data structure');
+        }
+        if (!chartData.layout) chartData.layout = {};
+        var traceType = chartData.data[0] && chartData.data[0].type;
         var isPie = traceType === 'pie';
         var isLine = traceType === 'scatter' || traceType === 'line';
 
@@ -181,13 +185,15 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           });
         }
 
-        var xaxis = Object.assign({}, chartData.layout && chartData.layout.xaxis || {}, {
+        var origXaxis = (chartData.layout && chartData.layout.xaxis) || {};
+        var origYaxis = (chartData.layout && chartData.layout.yaxis) || {};
+        var xaxis = Object.assign({}, origXaxis, {
           tickangle: -45,
           automargin: true,
           fixedrange: true,
           tickfont: { size: ${Math.max(8, fontSize - 1)} }
         });
-        var yaxis = Object.assign({}, chartData.layout && chartData.layout.yaxis || {}, {
+        var yaxis = Object.assign({}, origYaxis, {
           automargin: true,
           fixedrange: true,
           tickfont: { size: ${Math.max(8, fontSize - 1)} },
@@ -205,11 +211,11 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'transparent',
           font: { size: ${fontSize}, color: '#374151' },
-          title: chartData.layout && chartData.layout.title ? {
+          title: chartData.layout.title ? {
             text: truncateLabel(
               typeof chartData.layout.title === 'string'
                 ? chartData.layout.title
-                : (chartData.layout.title.text || ''),
+                : ((chartData.layout.title && chartData.layout.title.text) || ''),
               40
             ),
             font: { size: ${fontSize + 2}, color: '#1e1e3a' },
@@ -259,11 +265,11 @@ function PlotlyChartNative({ chartJson }: { chartJson: string }) {
       }
     }
 
-    // Load plotly-basic (smaller: ~1MB vs ~3.5MB full bundle)
+    // Load full plotly bundle (plotly-basic misses anchor resolution for some layouts)
     var retries = 0;
     function loadPlotly() {
       var script = document.createElement('script');
-      script.src = 'https://cdn.plot.ly/plotly-basic-2.35.0.min.js';
+      script.src = 'https://cdn.plot.ly/plotly-2.35.0.min.js';
       script.onload = function() { setTimeout(renderChart, 50); };
       script.onerror = function() {
         retries++;
